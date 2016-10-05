@@ -151,6 +151,9 @@ data EHCompileUnit
 %%[[(8 javascript)
       , _ecuMbJavaScript     :: !(Maybe AST_JavaScript)
 %%]]
+%%[[(8 core)
+      , _ecuMbCoreCPS        :: !(Maybe AST_CoreCPS)
+%%]]
       , ecuState             :: !EHCompileUnitState
       , _ecuASTType          :: !ASTType
       , _ecuASTFileContent   :: !ASTFileContent
@@ -233,6 +236,10 @@ ecuEH = isoMb "ecuMbEH" ecuMbEH
 ecuEHSem = isoMb "ecuMbEHSem" ecuMbEHSem
 ecuHS = isoMb "ecuMbHS" ecuMbHS
 ecuHSSem = isoMb "ecuMbHSSem" ecuMbHSSem
+%%]
+
+%%[(8 core) export(ecuMbCoreCPS, ecuCoreCPS)
+ecuCoreCPS = isoMb "ecuMbCoreCPS" ecuMbCoreCPS
 %%]
 
 %%[8 export(ecuAlreadyFlowIntoCRSI)
@@ -349,6 +356,9 @@ emptyECU
 %%]]
 %%[[(8 javascript)
       , _ecuMbJavaScript     = Nothing
+%%]]
+%%[[(8 core)
+      , _ecuMbCoreCPS        = Nothing
 %%]]
       , ecuState             = ECUS_Unknown
       , _ecuASTType          = ASTType_Unknown
@@ -654,6 +664,11 @@ ecuStoreBytecodeSem x ecu = ecu { ecuMbBytecodeSem = Just x }
 ecuStoreCmm :: EcuUpdater AST_Cmm
 ecuStoreCmm x ecu = ecu { _ecuMbCmm = Just x }
 %%]
+
+%%[[(8 core) export(ecuStoreCoreCPS)
+ecuStoreCoreCPS :: EcuUpdater AST_CoreCPS
+ecuStoreCoreCPS x ecu = ecu { _ecuMbCoreCPS = Just x }
+%%]]
 
 %%[50 export(ecuStoreSrcDeclImpS,ecuSetNeedsCompile,ecuStoreHIUsedImpS,ecuStoreHIInfoTime,ecuStoreSrcTime,ecuStoreHSSemMod,ecuStoreIntrodModS,ecuStoreHIDeclImpS,ecuStoreMod,ecuSetIsTopMod,ecuSetHasMain,ecuStoreOptim,ecuStoreHIInfo,ecuStorePrevHIInfo)
 ecuStoreSrcTime :: EcuUpdater ClockTime

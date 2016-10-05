@@ -87,6 +87,10 @@ Translation to another AST
 %%[(8 codegen java) import({%{EH}CodeGen.Bits},{%{EH}JVMClass.ToBinary})
 %%]
 
+-- CPS semantics
+%%[(8 core) import({%{EH}Core.ToCoreCPS})
+%%]
+
 -- HI AST
 %%[(50 codegen grin) import(qualified {%{EH}HI} as HI)
 %%]
@@ -398,3 +402,17 @@ cpTranslateByteCode modNm
         }
 %%]
 
+%%[(8 core) export(cpTranslateCore2CoreCPS)
+cpTranslateCore2CoreCPS :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()
+cpTranslateCore2CoreCPS modNm
+  = do  {  cr <- get
+        ;  let (ecu, crsi, opts, fp) = crBaseInfo modNm cr
+               mbCore = _ecuMbCore ecu
+        ;  cpMsg modNm VerboseALot $ "cpTranslateCore2CoreCPS running"
+        ;  when (isJust mbCore)
+             $ cpUpdCU modNm
+             $ ecuStoreCoreCPS
+             $ cmod2CoreCPSModule
+             $ fromJust mbCore
+        }
+%%]

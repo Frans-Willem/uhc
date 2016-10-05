@@ -1296,6 +1296,12 @@ cpProcessCoreBasic :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()
 cpProcessCoreBasic modNm 
   = do { cr <- get
        ; let (_,_,opts,_) = crBaseInfo modNm cr
+%%[[(8 core)
+       ; when (ehcOptIsViaCoreCPS opts)
+              ( do { cpTranslateCore2CoreCPS modNm
+                   ; cpProcessCoreCPS modNm
+                   })
+%%]]
        ; cpSeq [ cpTransformCore OptimizationScope_PerModule modNm
 %%[[50
                , cpFlowHILamMp modNm
@@ -1503,3 +1509,10 @@ cpProcessBytecode modNm
 
 %%]
 
+%%[(8 core)
+cpProcessCoreCPS :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()
+cpProcessCoreCPS modNm
+  = do { cpMsg modNm VerboseALot "cpProcessCoreCPS: dumping core cps"
+       ; void $ cpOutputCoreCPS ASTFileContent_Text "" modNm
+       }
+%%]

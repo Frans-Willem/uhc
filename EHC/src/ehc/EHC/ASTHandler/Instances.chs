@@ -81,6 +81,9 @@
 -- Cmm output
 %%[(8 codegen cmm) import({%{EH}Cmm} as Cmm,{%{EH}Cmm.ToC}(cmmMod2C), {%{EH}Cmm.Pretty})
 %%]
+-- CoreCPS output
+%%[(8 core) import({%{EH}CoreCPS} as CoreCPS, {%{EH}CoreCPS.Pretty} as CoreCPSPretty)
+%%]
 
 -- serialization
 %%[50 import(qualified UHC.Util.Binary as Bin, UHC.Util.Serialize)
@@ -512,6 +515,27 @@ astHandler'_JavaScript =
 					let ppMod = vlist $ [p] ++ (if ecuIsMainMod ecu then [pmain] else [])
 							where (p,pmain) = ppJavaScriptModule ast
 %%]]
+					in  "//" >#< ecuModNm ecu >-< ppMod
+			}
+%%]
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% ASTHandler': CoreCPS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%[(8 core) export(astHandler'_CoreCPS)
+astHandler'_CoreCPS :: ASTHandler' AST_CoreCPS
+astHandler'_CoreCPS = 
+  emptyASTHandler'
+			{ _asthdlrName              = "CoreCPS"
+            , _asthdlrASTLens           = Just ecuMbCoreCPS
+            , _asthdlrSuffixRel			= mkASTSuffixRel
+            								[ ( (ASTFileContent_Text	, ASTFileUse_Target)		, ("corecps", ecuMbCoreCPS, Nothing) )
+            								]
+			, _asthdlrEcuStore          = ecuStoreCoreCPS
+			, _asthdlrMkOutputFPath           = \opts m f suff -> mkPerModuleOutputFPath opts True m f suff
+            , _asthdlrPretty			= \opts ecu ast -> Just $
+					let ppMod = CoreCPSPretty.ppCTm ast
 					in  "//" >#< ecuModNm ecu >-< ppMod
 			}
 %%]

@@ -742,6 +742,12 @@ ehcOptIsViaGrin opts = ehcOptIsViaGrinCmmJavaScript opts || targetIsGrinBytecode
   where t = ehcOptTarget opts
 %%]
 
+%%[(8 core) export(ehcOptIsViaCoreCPS)
+ehcOptIsViaCoreCPS :: EHCOpts -> Bool
+ehcOptIsViaCoreCPS opts = targetIsLuaBC t
+  where t = ehcOptTarget opts
+%%]
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Getting a builtin name via EHCOpts
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
