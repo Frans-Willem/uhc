@@ -97,7 +97,7 @@ EHC_HS_UTIL_SRC_CHS_DFLT				:= $(patsubst %,$(SRC_EHC_PREFIX)%.chs,\
 														$(addprefix CompileRun/,Base) \
 														$(addprefix CompilePhase/,Run Parsers Output Translations Transformations Common \
 															FlowBetweenPhase TransformGrin Semantics \
-															CompileLLVM CompileC CompileJVM CompileJavaScript Link \
+															CompileLLVM CompileC CompileJVM CompileJavaScript CompileLuaBC Link \
 															Cleanup Module TopLevelPhases \
 													)	) \
 													Debug/HighWaterMark \

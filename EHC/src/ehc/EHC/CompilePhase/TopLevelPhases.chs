@@ -80,6 +80,8 @@ level 2..6 : with prefix 'cpEhc'
 %%]
 %%[(8 codegen javascript) import({%{EH}EHC.CompilePhase.CompileJavaScript})
 %%]
+%%[(8 core) import({%{EH}EHC.CompilePhase.CompileLuaBC})
+%%]
 %%[99 import({%{EH}Base.PackageDatabase})
 %%]
 %%[(99 codegen) import({%{EH}EHC.CompilePhase.Link})
@@ -1196,6 +1198,9 @@ cpEhcExecutablePerModule how impModNmL modNm
            ++ [ when (ehcOptJavaScriptViaCMM opts) $ cpTransformJavaScript OptimizationScope_PerModule modNm
               , cpCompileJavaScript how impModNmL modNm
               ]
+%%]]
+%%[[(8 core)
+           ++ [ cpCompileLuaBC how impModNmL modNm ]
 %%]]
        }
 %%]
