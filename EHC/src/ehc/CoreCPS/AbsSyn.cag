@@ -1,0 +1,53 @@
+%%[(0 core)
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%[(8 core) ag
+DATA CVal
+  | IntVal value : {Int}
+  | StringVal value : {String}
+  | LamVal
+      bindcont : {ContName}
+      bindarg : {ThunkName}
+      body : CTm
+  | TagVal
+      tag : {CTag}
+      args: {[ThunkName]}
+DATA CThunkBind
+  | ThunkBind
+      thunkname : {ThunkName}
+      contname : {ContName}
+      body : CTm
+TYPE CThunkBindL = [CThunkBind]
+DATA CContBind
+  | ContBind
+      contname : {ContName}
+      valname : {ValueName}
+      body : CTm
+TYPE CContBindL = [CContBind]
+
+DATA CTm
+  | LetVal
+      bindname : {ValueName}
+      bindvalue : CVal
+      body : CTm
+  | LetCont
+      binds : CContBindL
+      body : CTm
+  | LetThunk
+     binds : CThunkBindL 
+     body : CTm
+  | ContAppl
+      cont : {ContName}
+      val : {ValueName}
+  | ThunkEval
+      thunk : {ThunkName}
+      cont : {ContName}
+  | FuncAppl
+      func : {ValueName}
+      cont : {ContName}
+      arg : {ThunkName}
+  | Exit
+      val : {ValueName}
+%%]

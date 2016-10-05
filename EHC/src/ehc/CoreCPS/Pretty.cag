@@ -1,0 +1,73 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% CoreCPS Pretty Printer
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%[(8 core) hs module {%{EH}CoreCPS.Pretty} import(UHC.Util.Pretty,{%{EH}CoreCPS})
+%%]
+%%[(8 core) hs import({%{EH}Ty.Pretty})
+%%]
+
+%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn})
+WRAPPER
+  CTm
+%%]
+
+%%[(8 core) hs export(ppCTm)
+ppCTm :: CTm -> PP_Doc
+ppCTm tm
+  = pp_Syn_CTm t
+  where t = wrap_CTm (sem_CTm tm)
+              (Inh_CTm {})
+%%]
+
+%%[(8 core) hs
+instance PP ContName where
+  pp (ContName nm) = pp nm
+
+instance PP ThunkName where
+  pp (ThunkName nm) = pp nm
+
+instance PP ValueName where
+  pp (ValueName nm) = pp nm
+%%]
+
+%%[(8 core) ag
+ATTR CTm [ | | pp : {PP_Doc} ]
+SEM CTm
+  | LetVal lhs.pp
+      = (text "let val" >#< @bindname >#< text "=" >#< @bindvalue.pp)
+        >-< (text "in" >#< @body.pp)
+  | LetCont lhs.pp
+      = (text "let cont" >#< @binds.pp)
+        >-< (text "in" >#< @body.pp)
+  | LetThunk lhs.pp
+      = (text "let thunk" >#< @binds.pp) >-< (text "in" >#< @body.pp)
+  | ContAppl lhs.pp = @cont >#< @val >#< text "(cont-appl)"
+  | ThunkEval lhs.pp = @thunk >#< @cont >#< text "(thunk-eval)"
+  | FuncAppl lhs.pp = @func >#< @cont >#< @arg >#< text "(func-appl)"
+  | Exit lhs.pp = @val >#< text "(exit)"
+
+ATTR CThunkBindL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
+ATTR CThunkBind [ | | pp : {PP_Doc} ]
+SEM CThunkBind
+  | ThunkBind lhs.pp = @thunkname >#< @contname >#< (text "=") >#< @body.pp 
+
+ATTR CContBindL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
+ATTR CContBind [ | | pp : {PP_Doc} ]
+SEM CContBind
+  | ContBind lhs.pp = @contname >#< @valname >#< text "=" >#< @body.pp
+
+ATTR CVal [ | | pp : {PP_Doc} ]
+SEM CVal
+  | IntVal lhs.pp = text "#Int" >#< @value
+  | StringVal lhs.pp = text "#String" >#< @value
+  | LamVal lhs.pp
+      = text "(\\" >|< @bindcont >#< @bindarg >#< text "->" >#< @body.pp >|< text ")"
+  | TagVal lhs.pp
+      = text "#Tag" >#< ppSpaces ((pp @tag) : map pp @args)
+%%]

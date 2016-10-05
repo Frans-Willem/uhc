@@ -82,3 +82,5 @@ Cmm/ToJavaScript
 Cmm/Trf/SimplifyLocalNames.cag
 JavaScript/Trf/InlineSingleUseNames.cag
 JavaScript/Trf/CompactAndSimplify.cag
+Core/ToCoreCPS.cag
+CoreCPS/Pretty.cag

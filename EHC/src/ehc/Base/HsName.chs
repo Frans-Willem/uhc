@@ -98,6 +98,7 @@ data HsNameUniqifier
 %%]]
 %%[[(8 core)
   | HsNameUniqifier_CoreAPI             -- Used by the Core API, to allow external programs to generate new identifiers.
+  | HsNameUniqifier_CPS                 -- Used by CPS conversion.
 %%]]
   deriving (Eq,Ord,Enum,Generic)
 
@@ -144,6 +145,7 @@ instance Show HsNameUniqifier where
 %%]]
 %%[[(8 core)
   show HsNameUniqifier_CoreAPI              = "CRA"
+  show HsNameUniqifier_CPS                  = "CPS"
 %%]]
 %%]
 

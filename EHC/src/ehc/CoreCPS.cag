@@ -1,0 +1,28 @@
+%%[0 lhs2tex
+%inlude lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%[(8 core) hs module {%{EH}CoreCPS} import()
+%%]
+
+%%[(8 core) hs export( CVal(..), CTm(..), CThunkBind(..), CThunkBindL, CContBind(..), CContBindL, ValueName(..), ContName(..), ThunkName(..), CTag(..))
+%%]
+
+%%[(8 core) hs import({%{EH}CodeGen.Tag})
+%%]
+
+%%[(8 core) ag import({CoreCPS/AbsSyn})
+%%]
+
+%%[(8 core) hs import({%{EH}Base.Common})
+%%]
+
+%%[(8 core) hs
+newtype ValueName = ValueName HsName
+newtype ContName = ContName HsName
+newtype ThunkName = ThunkName HsName
+deriving instance Show ValueName
+deriving instance Show ContName
+deriving instance Show ThunkName
+%%]

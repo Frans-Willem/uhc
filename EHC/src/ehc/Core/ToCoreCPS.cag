@@ -1,0 +1,289 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%%
+%%% Conversion to Continuation-passing-style code
+%%%
+
+%%[(8 core) hs module {%{EH}Core.ToCoreCPS} import({%{EH}Base.Common} hiding (nextUnique),{%{EH}Core},{%{EH}Ty})
+%%]
+
+%%[(8 core) hs import(qualified {%{EH}CoreCPS} as CPS, Data.Maybe, {%{EH}Base.HsName})
+%%]
+
+%%[(8 core).WRAPPER ag import({Core/AbsSyn})
+WRAPPER CodeAGItf
+%%]
+
+%%[(8 core) hs export(cmod2CoreCPSModule)
+cmod2CoreCPSModule :: CModule -> CPS.CTm
+cmod2CoreCPSModule cmod
+  = cps_Syn_CodeAGItf t
+  where t = wrap_CodeAGItf (sem_CodeAGItf (CodeAGItf_AGItf cmod))
+              (Inh_CodeAGItf {})
+%%]
+
+%%[(8 core) hs
+createThunkName :: HsName -> CPS.ThunkName
+createThunkName name = CPS.ThunkName name
+
+createFreshContName :: Int -> CPS.ContName
+createFreshContName = CPS.ContName . hsnFromString . ("k"++) . show
+createFreshThunkName :: Int -> CPS.ThunkName
+createFreshThunkName = CPS.ThunkName . hsnFromString . ("t"++) . show
+createFreshValueName :: Int -> CPS.ValueName
+createFreshValueName = CPS.ValueName . hsnFromString . ("v"++) . show
+
+data CPSTranslationScheme
+  = CPSTranslationScheme_Value
+  | CPSTranslationScheme_ContinuationCall
+  | CPSTranslationScheme_Thunk
+%%]
+
+
+%%% Old UUAG syntax [ inherited (top-down) | threaded | synthesized (bottom-up) ]
+%%[(8 core) ag
+ATTR CodeAGItf CModule [ | | cps : {CPS.CTm} ]
+SEM CModule
+  | Mod lhs.cps = @expr.cpsTrans
+  | Mod expr.cpsScheme = CPSTranslationScheme_Value
+  | Mod expr.cpsContent = CPS.CTm_Exit @expr.cpsValueName
+  | Mod expr.cpsFreshContCounter = 1
+  | Mod expr.cpsFreshThunkCounter = 1
+  | Mod expr.cpsFreshValueCounter = 1
+{-
+Kappa variable of type (variable -> term)
+is replaced by synthesized attribute cpsValueName and cpsThunkName,
+and inherited attribute (relying on the synthesized attribute) cpsContent
+-}
+ATTR CExpr CBind CBound CBindL CBoundL [ cpsScheme : {CPSTranslationScheme} cpsContent : {CPS.CTm} cpsContName : {CPS.ContName} | | cpsTrans : {CPS.CTm} cpsValueName : {CPS.ValueName} cpsThunkName : {CPS.ThunkName} ]
+ATTR CExpr CBind CBound CBindL CBoundL [ | cpsFreshValueCounter : {Int} | ]
+ATTR CExpr CBind CBound CBindL CBoundL [ | cpsFreshThunkCounter : {Int} | ]
+ATTR CExpr CBind CBound CBindL CBoundL [ | cpsFreshContCounter : {Int} | ]
+
+{- Let transformation -}
+SEM CExpr
+  | Let loc.isStrict = @categ == CBindCateg_Strict
+{- cpsContent is only used in let strict -}
+  | Let binds.cpsContent = CPS.CTm_LetThunk @binds.cpsStrictBinds @body.cpsTrans
+  | Let binds.cpsScheme =
+      if @loc.isStrict then CPSTranslationScheme_Value else CPSTranslationScheme_ContinuationCall
+  | Let lhs.cpsTrans =
+      if @loc.isStrict
+      then
+        @binds.cpsTrans
+      else
+        CPS.CTm_LetThunk @binds.cpsBinds @body.cpsTrans
+
+ATTR CBindL [ | | cpsBinds USE {:} {[]} : {CPS.CThunkBindL} ]
+ATTR CBindL [ | | cpsStrictBinds USE {:} {[]} : {CPS.CThunkBindL}]
+SEM CBindL
+  | Nil lhs.cpsTrans = @lhs.cpsContent
+  | Cons hd.cpsContent = @tl.cpsTrans
+  | Cons lhs.cpsTrans = @hd.cpsTrans
+
+ATTR CBind [ | | cpsBindName : {CPS.ThunkName} ]
+ATTR CBind [ | | cpsBinds : {CPS.CThunkBind} cpsStrictBinds : {CPS.CThunkBind} ]
+{- Fresh continuation variable -}
+SEM CBind
+  | Bind loc.cpsContCounter : UNIQUEREF cpsFreshContCounter
+  | Bind loc.cpsContName = createFreshContName @loc.cpsContCounter
+{- Create the actual binding -}
+SEM CBind
+  | Bind bindAspects.cpsContName = @loc.cpsContName
+  | Bind loc.cpsBindName = createThunkName @nm
+  | Bind lhs.cpsBinds =
+      CPS.CThunkBind_ThunkBind
+        @loc.cpsBindName
+        @loc.cpsContName
+        @bindAspects.cpsTrans
+  | Bind lhs.cpsStrictBinds =
+      CPS.CThunkBind_ThunkBind
+        @loc.cpsBindName
+        @loc.cpsContName
+        (CPS.CTm_ContAppl @loc.cpsContName @bindAspects.cpsValueName)
+{- Use from the first 'Bind' binding -}
+ATTR CBound [ | | cpsUseBinding : {Bool} ]
+SEM CBound
+  | Bind lhs.cpsUseBinding = True
+  | * - Bind lhs.cpsUseBinding = False
+SEM CBoundL
+  | Nil lhs.cpsTrans = error "No proper binding found"
+  | Nil lhs.cpsValueName = error "No proper binding found"
+  | Nil lhs.cpsThunkName = error "No proper binding found"
+  | Cons lhs.cpsTrans = if @hd.cpsUseBinding then @hd.cpsTrans else @tl.cpsTrans
+  | Cons lhs.cpsValueName = if @hd.cpsUseBinding then @hd.cpsValueName else @tl.cpsValueName
+  | Cons lhs.cpsThunkName = if @hd.cpsUseBinding then @hd.cpsThunkName else @tl.cpsThunkName
+
+{- Variable reference translation -}
+SEM CExpr
+{- TODO: Fix these to only generate a fresh variable when needed -}
+  | Var loc.cpsValueNumber : UNIQUEREF cpsFreshValueCounter
+  | Var loc.cpsValueName = createFreshValueName @loc.cpsValueNumber
+  | Var loc.cpsFreshContNumber : UNIQUEREF cpsFreshContCounter
+  | Var loc.cpsFreshContName = createFreshContName @loc.cpsFreshContNumber
+{- end TODO -}
+  | Var loc.cpsThunkName = createThunkName (acbrefNm @ref)
+  | Var lhs.cpsTrans =
+      case @lhs.cpsScheme of
+        CPSTranslationScheme_Value ->
+          CPS.CTm_LetCont
+            [CPS.CContBind_ContBind @loc.cpsFreshContName @loc.cpsValueName @lhs.cpsContent]
+            (CPS.CTm_ThunkEval @loc.cpsThunkName @loc.cpsFreshContName)
+        CPSTranslationScheme_ContinuationCall ->
+          CPS.CTm_ThunkEval @loc.cpsThunkName @lhs.cpsContName
+        CPSTranslationScheme_Thunk ->
+          @lhs.cpsContent
+
+{- Lambda translation -}
+SEM CExpr
+{- Fresh variable names -}
+  | Lam loc.cpsLamContNumber : UNIQUEREF cpsFreshContCounter
+  | Lam loc.cpsLamContName = createFreshContName @loc.cpsLamContNumber
+  | Lam loc.cpsThunkContNumber : UNIQUEREF cpsFreshContCounter
+  | Lam loc.cpsThunkContName = createFreshContName @loc.cpsThunkContNumber
+  | Lam loc.cpsValueNumber : UNIQUEREF cpsFreshValueCounter
+  | Lam loc.cpsValueName = createFreshValueName @loc.cpsValueNumber
+  | Lam loc.cpsThunkNumber : UNIQUEREF cpsFreshThunkCounter
+  | Lam loc.cpsThunkName = createFreshThunkName @loc.cpsThunkNumber
+{- Value -}
+  | Lam loc.cpsValue =
+      CPS.CVal_LamVal @loc.cpsLamContName @bind.cpsBindName @body.cpsTrans
+  | Lam body.cpsScheme = CPSTranslationScheme_ContinuationCall
+  | Lam body.cpsContName = @loc.cpsLamContName
+{- Actual translation -}
+  | Lam lhs.cpsTrans =
+      case @lhs.cpsScheme of
+        CPSTranslationScheme_Value ->
+          CPS.CTm_LetVal 
+            @loc.cpsValueName
+            @loc.cpsValue
+            @lhs.cpsContent
+        CPSTranslationScheme_ContinuationCall ->
+          CPS.CTm_LetVal
+            @loc.cpsValueName
+            @loc.cpsValue
+            (CPS.CTm_ContAppl @lhs.cpsContName @loc.cpsValueName)
+        CPSTranslationScheme_Thunk ->
+          CPS.CTm_LetThunk
+            [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsThunkContName
+              (
+                CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue 
+                (
+                  CPS.CTm_ContAppl
+                  @loc.cpsThunkContName
+                  @loc.cpsValueName
+                )
+              )]
+            @lhs.cpsContent
+
+{- Application transformation -}
+SEM CExpr
+  | App loc.cpsValueNumber : UNIQUEREF cpsFreshValueCounter
+  | App loc.cpsValueName =
+      case @func.isTag of
+        True -> @func.cpsValueName
+        False -> createFreshValueName @loc.cpsValueNumber
+  | App loc.cpsAppContNumber : UNIQUEREF cpsFreshContCounter
+  | App loc.cpsAppContName = createFreshContName @loc.cpsAppContNumber
+  | App loc.cpsThunkNumber : UNIQUEREF cpsFreshThunkCounter
+  | App loc.cpsThunkName =
+      case @func.isTag of
+        True -> @func.cpsThunkName
+        False -> createFreshThunkName @loc.cpsThunkNumber
+  | App func.cpsScheme =
+      case @func.isTag of
+        True -> @lhs.cpsScheme
+        False -> CPSTranslationScheme_Value
+  | App func.cpsContent =
+      case @func.isTag of
+        True -> @lhs.cpsContent
+        False -> @arg.cpsTrans
+  | App arg.cpsScheme = CPSTranslationScheme_Thunk
+  | App arg.cpsContent =
+      case @func.isTag of
+        True -> @func.cpsTrans
+        False ->
+          case @lhs.cpsScheme of
+            CPSTranslationScheme_Value ->
+              CPS.CTm_LetCont
+                [CPS.CContBind_ContBind @loc.cpsAppContName @loc.cpsValueName @lhs.cpsContent]
+                (CPS.CTm_FuncAppl
+                  @func.cpsValueName
+                  @loc.cpsAppContName
+                  @arg.cpsThunkName
+                )
+            CPSTranslationScheme_ContinuationCall ->
+              CPS.CTm_FuncAppl
+                @func.cpsValueName
+                @lhs.cpsContName
+                @arg.cpsThunkName
+            CPSTranslationScheme_Thunk ->
+              CPS.CTm_FuncAppl
+                @func.cpsValueName
+                @loc.cpsAppContName
+                @arg.cpsThunkName
+  | App func.tagArgs = @arg.cpsThunkName : @lhs.tagArgs
+  | App lhs.cpsTrans = 
+      case @func.isTag of
+        True -> @arg.cpsTrans
+        False ->
+          case @lhs.cpsScheme of
+            CPSTranslationScheme_Value -> @func.cpsTrans
+            CPSTranslationScheme_ContinuationCall -> @func.cpsTrans
+            CPSTranslationScheme_Thunk ->
+              CPS.CTm_LetThunk
+                [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsAppContName @func.cpsTrans]
+                @lhs.cpsContent
+
+{- Integer transformation -}
+SEM CExpr
+  | Int loc.cpsValueNumber : UNIQUEREF cpsFreshValueCounter
+  | Int loc.cpsValueName = createFreshValueName @loc.cpsValueNumber
+  | Int loc.cpsThunkNumber : UNIQUEREF cpsFreshThunkCounter
+  | Int loc.cpsThunkName = createFreshThunkName @loc.cpsThunkNumber
+  | Int loc.cpsFreshContNumber : UNIQUEREF cpsFreshContCounter
+  | Int loc.cpsFreshContName = createFreshContName @loc.cpsFreshContNumber
+  | Int loc.cpsValue = CPS.CVal_IntVal @int
+  | Int lhs.cpsTrans =
+      case @lhs.cpsScheme of
+        CPSTranslationScheme_Value ->
+          CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue @lhs.cpsContent
+        CPSTranslationScheme_ContinuationCall ->
+          CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue (CPS.CTm_ContAppl @lhs.cpsContName @loc.cpsValueName)
+        CPSTranslationScheme_Thunk ->
+          CPS.CTm_LetThunk [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsFreshContName (CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue (CPS.CTm_ContAppl @loc.cpsFreshContName @loc.cpsValueName))] @lhs.cpsContent
+
+{- Tag transformation -}
+ATTR CExpr [ tagArgs : {[CPS.ThunkName]} | | isTag : {Bool} ]
+SEM CExpr
+  | Tup lhs.isTag = True
+  | App lhs.isTag = @func.isTag
+  | * - App Tup lhs.isTag = False
+  | Tup loc.cpsValueNumber : UNIQUEREF cpsFreshValueCounter
+  | Tup loc.cpsValueName = createFreshValueName @loc.cpsValueNumber
+  | Tup loc.cpsThunkNumber : UNIQUEREF cpsFreshThunkCounter
+  | Tup loc.cpsThunkName = createFreshThunkName @loc.cpsThunkNumber
+  | Tup loc.cpsFreshContNumber : UNIQUEREF cpsFreshContCounter
+  | Tup loc.cpsFreshContName = createFreshContName @loc.cpsFreshContNumber
+  | Tup loc.cpsValue = CPS.CVal_TagVal @tag @lhs.tagArgs
+  | Tup lhs.cpsTrans =
+      case @lhs.cpsScheme of
+        CPSTranslationScheme_Value ->
+          CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue @lhs.cpsContent
+        CPSTranslationScheme_ContinuationCall ->
+          CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue (CPS.CTm_ContAppl @lhs.cpsContName @loc.cpsValueName)
+        CPSTranslationScheme_Thunk ->
+          CPS.CTm_LetThunk [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsFreshContName (CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue (CPS.CTm_ContAppl @loc.cpsFreshContName @loc.cpsValueName))] @lhs.cpsContent
+
+SEM CBound
+  | Val expr.tagArgs = []
+        
+%%]
+
+%%[(8 core) hs
+nextUnique :: Int -> (Int, Int)
+nextUnique n = (n+1, n)
+%%]
