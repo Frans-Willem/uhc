@@ -153,6 +153,7 @@ data EHCompileUnit
 %%]]
 %%[[(8 core)
       , _ecuMbCoreCPS        :: !(Maybe AST_CoreCPS)
+      , _ecuMbLuaBC          :: !(Maybe AST_LuaBC)
 %%]]
       , ecuState             :: !EHCompileUnitState
       , _ecuASTType          :: !ASTType
@@ -240,6 +241,9 @@ ecuHSSem = isoMb "ecuMbHSSem" ecuMbHSSem
 
 %%[(8 core) export(ecuMbCoreCPS, ecuCoreCPS)
 ecuCoreCPS = isoMb "ecuMbCoreCPS" ecuMbCoreCPS
+%%]
+%%[(8 core) export(ecuMbLuaBC, ecuLuaBC)
+ecuLuaBC = isoMb "ecuMbLuaBC" ecuMbLuaBC
 %%]
 
 %%[8 export(ecuAlreadyFlowIntoCRSI)
@@ -359,6 +363,7 @@ emptyECU
 %%]]
 %%[[(8 core)
       , _ecuMbCoreCPS        = Nothing
+      , _ecuMbLuaBC          = Nothing
 %%]]
       , ecuState             = ECUS_Unknown
       , _ecuASTType          = ASTType_Unknown
@@ -669,6 +674,11 @@ ecuStoreCmm x ecu = ecu { _ecuMbCmm = Just x }
 ecuStoreCoreCPS :: EcuUpdater AST_CoreCPS
 ecuStoreCoreCPS x ecu = ecu { _ecuMbCoreCPS = Just x }
 %%]]
+
+%%[(8 core) export(ecuStoreLuaBC)
+ecuStoreLuaBC :: EcuUpdater AST_LuaBC
+ecuStoreLuaBC x ecu = ecu { _ecuMbLuaBC = Just x }
+%%]
 
 %%[50 export(ecuStoreSrcDeclImpS,ecuSetNeedsCompile,ecuStoreHIUsedImpS,ecuStoreHIInfoTime,ecuStoreSrcTime,ecuStoreHSSemMod,ecuStoreIntrodModS,ecuStoreHIDeclImpS,ecuStoreMod,ecuSetIsTopMod,ecuSetHasMain,ecuStoreOptim,ecuStoreHIInfo,ecuStorePrevHIInfo)
 ecuStoreSrcTime :: EcuUpdater ClockTime

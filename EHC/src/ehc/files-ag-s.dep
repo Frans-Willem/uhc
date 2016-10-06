@@ -84,3 +84,5 @@ JavaScript/Trf/InlineSingleUseNames.cag
 JavaScript/Trf/CompactAndSimplify.cag
 Core/ToCoreCPS.cag
 CoreCPS/Pretty.cag
+CoreCPS/ToLuaBC.cag
+LuaBC/Pretty.cag

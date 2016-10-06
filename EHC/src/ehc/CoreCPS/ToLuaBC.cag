@@ -1,0 +1,34 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%%
+%%% Conversion to Lua bytecode
+%%%
+
+%%[(8 core) hs module {%{EH}CoreCPS.ToLuaBC} import({%{EH}Base.Common} hiding (nextUnique),{%{EH}CoreCPS})
+%%]
+
+%%[(8 core) hs import(qualified {%{EH}LuaBC} as LuaBC, Data.Maybe, {%{EH}Base.HsName})
+%%]
+
+%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn})
+WRAPPER CTm
+%%]
+
+%%[(8 core) hs export(cps2luaChunk)
+cps2luaPrototype :: CTm -> LuaBC.CPrototype
+cps2luaPrototype tm
+  = luaproto_Syn_CTm t
+  where t = wrap_CTm (sem_CTm tm) (Inh_CTm {})
+
+cps2luaChunk :: CTm -> LuaBC.CChunk
+cps2luaChunk tm = error "TODO"
+%%]
+
+%%[(8 core) ag
+ATTR CTm [ | | luaproto : {LuaBC.CPrototype} ]
+SEM CTm
+	| * lhs.luaproto = error "TODO"
+%%]

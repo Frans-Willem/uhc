@@ -292,4 +292,11 @@ cpOutputCoreCPS how nmsuff modNm =
       cpOutputSomeModule (^. ecuCoreCPS) astHandler'_CoreCPS how nmsuff "corecps" modNm
 %%]
 
+%%[(8 core) export(cpOutputLuaBC)
+cpOutputLuaBC :: EHCCompileRunner m => ASTFileContent -> String -> HsName -> EHCompilePhaseT m FPath
+cpOutputLuaBC how nmsuff modNm =
+    fmap (panicJust "cpOutputLuaBC.cpOutputSomeModule") $
+      cpOutputSomeModule (^. ecuLuaBC) astHandler'_LuaBC how nmsuff "luabc" modNm
+%%]
+
 

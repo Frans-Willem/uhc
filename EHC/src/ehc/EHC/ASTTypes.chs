@@ -58,6 +58,10 @@
 %%[(8 core) import(qualified {%{EH}CoreCPS} as CoreCPS)
 %%]
 
+-- LuaBC
+%%[(8 core) import(qualified {%{EH}LuaBC} as LuaBC)
+%%]
+
 -- HI Syntax and semantics, HS module semantics
 %%[50 import(qualified {%{EH}HI} as HI)
 %%]
@@ -142,5 +146,9 @@ type AST_GrinBytecode		= Bytecode.Module
 
 %%[(8 core) export(AST_CoreCPS)
 type AST_CoreCPS = CoreCPS.CTm
+%%]
+
+%%[(8 core) export(AST_LuaBC)
+type AST_LuaBC = LuaBC.CChunk
 %%]
 

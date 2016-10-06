@@ -1514,5 +1514,22 @@ cpProcessCoreCPS :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()
 cpProcessCoreCPS modNm
   = do { cpMsg modNm VerboseALot "cpProcessCoreCPS: dumping core cps"
        ; void $ cpOutputCoreCPS ASTFileContent_Text "" modNm
+       ; cpProcessCoreCPSRest modNm
+       }
+
+cpProcessCoreCPSRest :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()
+cpProcessCoreCPSRest modNm
+  = do { cr <- get
+       ; let (_,_,opts,_) = crBaseInfo modNm cr
+       ; when (ehcOptIsLuaBC opts)
+              ( do { cpTranslateCoreCPS2LuaBC modNm
+                   ; cpProcessLuaBC modNm
+                   })
+       }
+
+cpProcessLuaBC :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()
+cpProcessLuaBC modNm
+  = do { cpMsg modNm VerboseALot "cpProcessLuaBC: dumping first stage"
+       ; void $ cpOutputLuaBC ASTFileContent_Text "-initial" modNm
        }
 %%]

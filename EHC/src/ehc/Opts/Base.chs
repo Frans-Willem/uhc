@@ -744,8 +744,12 @@ ehcOptIsViaGrin opts = ehcOptIsViaGrinCmmJavaScript opts || targetIsGrinBytecode
 
 %%[(8 core) export(ehcOptIsViaCoreCPS)
 ehcOptIsViaCoreCPS :: EHCOpts -> Bool
-ehcOptIsViaCoreCPS opts = targetIsLuaBC t
-  where t = ehcOptTarget opts
+ehcOptIsViaCoreCPS opts = ehcOptIsLuaBC opts
+%%]
+
+%%[(8 core) export(ehcOptIsLuaBC)
+ehcOptIsLuaBC :: EHCOpts -> Bool
+ehcOptIsLuaBC opts = targetIsLuaBC $ ehcOptTarget opts
 %%]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

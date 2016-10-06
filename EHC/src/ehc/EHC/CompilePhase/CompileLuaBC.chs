@@ -17,8 +17,11 @@
 cpCompileLuaBC :: EHCCompileRunner m => FinalCompileHow -> [HsName] -> HsName -> EHCompilePhaseT m ()
 cpCompileLuaBC how othModNmL modNm
   = do { cr <- get
-       ; let (_,_,opts,fp) = crBaseInfo modNm cr
+       ; let (ecu,_,opts,fp) = crBaseInfo modNm cr
+             fpCl c = mkOutputFPath opts c (fpathSetBase (show c) fp) "lc"
        ; when (targetIsLuaBC (ehcOptTarget opts))
-              (do { error "Not implemented yet :(" })
+              (do { cpMsg modNm VerboseALot $ "Emit Lua BC: " ++ (fpathToStr fp)
+                  }
+              )
        }
 %%]

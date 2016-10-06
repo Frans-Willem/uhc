@@ -1,0 +1,13 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%[(8 core) hs module {%{EH}LuaBC} import()
+%%]
+
+%%[(8 core) hs export (CChunkHeader(..), CChunk(..), CVarArgFlag(..),CPrototype(..),CPrototypeL(..),CRegOrConst(..),CInstruction(..),CInstructionL(..),CConstant(..),CConstantL(..),CLocal(..),CLocalL(..), CUpvalue(..),CUpvalueL(..))
+%%]
+
+%%[(8 core) ag import({LuaBC/AbsSyn})
+%%]

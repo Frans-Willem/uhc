@@ -1,0 +1,40 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Lua bytecode Pretty Printer
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%[(8 core) hs module {%{EH}LuaBC.Pretty} import(UHC.Util.Pretty,{%{EH}LuaBC})
+%%]
+%%[(8 core) hs import({%{EH}Ty.Pretty})
+%%]
+
+%%[(8 core).WRAPPER ag import({LuaBC/AbsSyn})
+WRAPPER
+  CChunk
+%%]
+
+%%[(8 core) hs export(ppCChunk)
+ppCChunk :: CChunk -> PP_Doc
+ppCChunk chunk
+  = pp_Syn_CChunk t
+  where t = wrap_CChunk (sem_CChunk chunk)
+              (Inh_CChunk {})
+%%]
+
+%%[(8 core) ag
+ATTR CChunk [ | | pp : {PP_Doc} ]
+SEM CChunk
+	| Chunk lhs.pp = text "Chunk header" >-< (indent 2 @header.pp) >-< text "Main prototype" >-< (indent 2 @main.pp)
+
+ATTR CChunkHeader [ | | pp : {PP_Doc} ]
+SEM CChunkHeader
+	| ChunkHeader lhs.pp = text "(header TODO)"
+
+ATTR CPrototype [ | | pp : {PP_Doc} ]
+SEM CPrototype
+	| Prototype lhs.pp = text "(prototype TODO)"
+%%]
