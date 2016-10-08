@@ -12,6 +12,8 @@
 
 %%[(8 core) hs import(qualified {%{EH}LuaBC} as LuaBC, Data.Maybe, {%{EH}Base.HsName})
 %%]
+%%[(8 core) hs import(qualified Data.Map.Strict as Map, qualified Data.Set as Set)
+%%]
 
 %%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn})
 WRAPPER CTm
@@ -20,15 +22,259 @@ WRAPPER CTm
 %%[(8 core) hs export(cps2luaChunk)
 cps2luaPrototype :: CTm -> LuaBC.CPrototype
 cps2luaPrototype tm
-  = luaproto_Syn_CTm t
-  where t = wrap_CTm (sem_CTm tm) (Inh_CTm {})
+  = createProto (instr_Syn_CTm t) ((maxstack_Syn_CTm t)+1) (consts_Syn_CTm t) (protos_Syn_CTm t)
+  where
+    t = wrap_CTm (sem_CTm tm) (inh)
+    inh = Inh_CTm {env_Inh_CTm = Map.empty, stackoffset_Inh_CTm = 0, protos_Inh_CTm = [], consts_Inh_CTm = []}
 
 cps2luaChunk :: CTm -> LuaBC.CChunk
-cps2luaChunk tm = error "TODO"
+cps2luaChunk tm = LuaBC.CChunk_Chunk $ cps2luaPrototype tm
 %%]
 
+%%[(8 core) hs
+data VarLoc = Stack Int | Upvalue Int
+
+data EnvironmentKey
+  = EnvironmentValue HsName
+  | EnvironmentThunk HsName
+  | EnvironmentCont HsName
+  deriving (Eq, Ord)
+
+instance Show EnvironmentKey where
+  show (EnvironmentValue v) = "value " ++ show v
+  show (EnvironmentThunk v) = "thunk " ++ show v
+  show (EnvironmentCont v) = "continuation " ++ show v
+
+valueName :: ValueName -> EnvironmentKey
+valueName (ValueName v) = EnvironmentValue v
+
+thunkName :: ThunkName -> EnvironmentKey
+thunkName (ThunkName v) = EnvironmentThunk v
+
+contName :: ContName -> EnvironmentKey
+contName (ContName v) = EnvironmentCont v
+
+type Environment = Map.Map EnvironmentKey VarLoc
+
+readVar :: VarLoc -> Int -> Int -> ([LuaBC.CInstruction],Int)
+readVar (Stack regSource) regTarget stackoffset = ([LuaBC.CInstruction_Move regTarget regSource], max regTarget regSource)
+readVar (Upvalue index) regTarget stackoffset = ([LuaBC.CInstruction_GetUpval regTarget index], regTarget)
+
+readEnv :: Environment -> EnvironmentKey -> Int -> Int -> ([LuaBC.CInstruction], Int)
+readEnv env key
+  = case (Map.lookup key env) of
+      Just x -> readVar x
+      Nothing -> \regTarget stackoffset -> ([LuaBC.CInstruction_Comment $ "Undefined variable '" ++ (show key) ++ "' should be placed at " ++ (show regTarget)], regTarget)
+
+
+createProto :: LuaBC.CInstructionL -> Int -> LuaBC.CConstantL -> LuaBC.CPrototypeL -> LuaBC.CPrototype
+createProto instr stacksize consts protos
+  = LuaBC.CPrototype_Prototype
+      "Main source"
+      0 0
+      0 0
+      (LuaBC.CVarArgFlag_VarArgFlag False True False)
+      stacksize
+      instr
+      consts
+      protos
+      []
+      []
+      []
+%%]
+
+%%% Old UUAG syntax [ inherited (top-down) | threaded | synthesized (bottom-up) ]
 %%[(8 core) ag
-ATTR CTm [ | | luaproto : {LuaBC.CPrototype} ]
+ATTR CTm [ | consts : {LuaBC.CConstantL} protos : {LuaBC.CPrototypeL} | instr USE {++} {[]} : {LuaBC.CInstructionL} ]
+ATTR CTm [ env : {Environment} stackoffset : {Int} | | maxstack : {Int} ]
 SEM CTm
-	| * lhs.luaproto = error "TODO"
+----
+-- LetVal
+----
+  | LetVal bindvalue.target = @lhs.stackoffset
+  | LetVal body.stackoffset = @lhs.stackoffset + 1
+  | LetVal body.env = Map.insert (valueName @bindname) (Stack @lhs.stackoffset) @lhs.env
+  | LetVal lhs.instr = @bindvalue.instr ++ @body.instr
+----
+-- ThunkEval
+----
+  | ThunkEval loc.regThunk = @lhs.stackoffset
+  | ThunkEval loc.regCont = @lhs.stackoffset + 1
+  | ThunkEval loc.newstackoffset = @lhs.stackoffset + 2
+  | ThunkEval (loc.thunkinstr, loc.thunkmaxstack) = readEnv @lhs.env (thunkName @thunk) @loc.regThunk @loc.newstackoffset
+  | ThunkEval (loc.continstr, loc.contmaxstack) = readEnv @lhs.env (contName @cont) @loc.regCont @loc.newstackoffset
+  | ThunkEval lhs.instr =
+      @loc.thunkinstr ++ @loc.continstr ++
+      [ LuaBC.CInstruction_TailCall @loc.regThunk 2
+      , LuaBC.CInstruction_Return @loc.regThunk 0
+      ]
+  | ThunkEval lhs.maxstack = foldl1 max [@loc.regCont, @loc.thunkmaxstack, @loc.contmaxstack]
+----
+-- ContAppl
+----
+  | ContAppl loc.regCont = @lhs.stackoffset
+  | ContAppl loc.regValue = @lhs.stackoffset + 1
+  | ContAppl loc.newstackoffset = @lhs.stackoffset + 2
+  | ContAppl (loc.instrCont, loc.maxstackCont) = readEnv @lhs.env (contName @cont) @loc.regCont @loc.newstackoffset
+  | ContAppl (loc.instrValue, loc.maxstackValue) = readEnv @lhs.env (valueName @val) @loc.regValue @loc.newstackoffset
+  | ContAppl lhs.instr =
+      @loc.instrCont ++ @loc.instrValue ++
+      [ LuaBC.CInstruction_TailCall @loc.regCont 2
+      , LuaBC.CInstruction_Return @loc.regCont 0
+      ]
+  | ContAppl lhs.maxstack = foldl1 max [@loc.maxstackCont, @loc.maxstackValue, @loc.regValue]
+  
+----
+-- LetCont
+----
+  | LetCont binds.target = @lhs.stackoffset
+  | LetCont binds.stackoffset = @binds.target
+  | LetCont body.stackoffset = @binds.target
+  | LetCont loc.env = Map.union @lhs.env @binds.binds
+----
+-- LetThunk
+----
+  | LetThunk binds.target = @lhs.stackoffset
+  | LetThunk binds.stackoffset = @binds.target
+  | LetThunk body.stackoffset = @binds.target
+  | LetThunk loc.env = Map.union @lhs.env @binds.binds
+----
+-- Exit
+----
+  | Exit lhs.consts = @lhs.consts ++ [LuaBC.CConstant_String "print"]
+  | Exit loc.idxPrint = length @lhs.consts
+  | Exit loc.regTarget = @lhs.stackoffset
+  | Exit loc.regPrint = @lhs.stackoffset + 1
+  | Exit loc.regArg = @lhs.stackoffset + 2
+  | Exit (loc.valinstr, loc.valmaxstack) = readEnv @lhs.env (valueName @val) @loc.regTarget (@lhs.stackoffset+1)
+  | Exit lhs.instr =
+      @loc.valinstr ++
+      [ LuaBC.CInstruction_GetGlobal @loc.regPrint @loc.idxPrint
+      , LuaBC.CInstruction_Move @loc.regArg @loc.regTarget
+      , LuaBC.CInstruction_Call @loc.regPrint 2 1
+      ] ++
+      [LuaBC.CInstruction_Return @loc.regTarget 2]
+  | Exit lhs.maxstack = max @loc.valmaxstack @loc.regArg
+
+ATTR CContBind [ | | name : {ContName} prototype : {LuaBC.CPrototype} upvalues : {[EnvironmentKey]}]
+SEM CContBind
+  | ContBind lhs.name = @contname
+  | ContBind loc.upvalues = Set.toList $ @body.freevars `Set.difference` (Set.fromList [contName @contname, valueName @valname])
+  | ContBind lhs.prototype =
+      LuaBC.CPrototype_Prototype
+        (show $ contName @contname)
+        0 0
+        (length @loc.upvalues)
+        1 -- numParams
+        (LuaBC.CVarArgFlag_VarArgFlag False False False)
+        (@body.maxstack + 1)
+        @body.instr
+        @body.consts
+        @body.protos
+        []
+        []
+        (map show @loc.upvalues)
+  | ContBind body.protos = []
+  | ContBind body.consts = []
+  | ContBind loc.envList =
+      zip @loc.upvalues (map Upvalue [0..]) ++
+      [(valueName @valname, Stack 0)]
+  | ContBind body.env = Map.fromList @loc.envList
+  | ContBind body.stackoffset = 1
+
+ATTR CContBindL [ | target : {Int} | binds : {Environment} ]
+SEM CContBindL
+  | Nil lhs.binds = Map.empty
+  | Cons loc.regTarget = @lhs.target
+  | Cons tl.target = @lhs.target + 1
+  | Cons lhs.binds = Map.insert (contName @hd.name) (Stack @loc.regTarget) @tl.binds
+
+ATTR CContBindL [ stackoffset : {Int} | | ]
+ATTR CContBindL [ env : {Environment} | protos : {[LuaBC.CPrototype]} | instr : {[LuaBC.CInstruction]} ]
+ATTR CContBindL [ | | maxstack : {Int} ]
+SEM CContBindL
+  | Cons lhs.protos = @lhs.protos ++ [@hd.prototype]
+  | Cons (loc.upvalinstr, loc.upvalmaxstack) = unzip $ map (\upval -> readEnv @lhs.env upval 0 @lhs.stackoffset) @hd.upvalues
+  | Cons lhs.maxstack = foldl max @tl.maxstack (@loc.regTarget : @loc.upvalmaxstack)
+  | Cons lhs.instr =
+      [ LuaBC.CInstruction_Closure @loc.regTarget (length @lhs.protos)
+      ] ++
+      concat @loc.upvalinstr
+
+ATTR CThunkBind [ | | name : {ThunkName} prototype : {LuaBC.CPrototype} upvalues : {[EnvironmentKey]} ]
+SEM CThunkBind
+  | ThunkBind lhs.name = @thunkname
+  | ThunkBind loc.upvalues = Set.toList $ Set.delete (contName @contname) @body.freevars
+  | ThunkBind lhs.prototype =
+      LuaBC.CPrototype_Prototype
+        (show $ thunkName @thunkname)
+        0 0
+        (length @loc.upvalues)
+        1 -- numParams
+        (LuaBC.CVarArgFlag_VarArgFlag False False False)
+        (@body.maxstack + 1)
+        @body.instr
+        @body.consts
+        @body.protos
+        []
+        []
+        (map show @loc.upvalues)
+  | ThunkBind body.protos = []
+  | ThunkBind body.consts = []
+  | ThunkBind loc.envList =
+      zip @loc.upvalues (map Upvalue [0..]) ++
+      [(contName @contname, Stack 0)]
+  | ThunkBind body.env = Map.fromList @loc.envList
+  | ThunkBind body.stackoffset = 1
+
+ATTR CThunkBindL [ | target : {Int} | binds : {Environment} ]
+SEM CThunkBindL
+  | Nil lhs.binds = Map.empty
+  | Cons loc.regTarget = @lhs.target
+  | Cons tl.target = @lhs.target + 1
+  | Cons lhs.binds = Map.insert (thunkName @hd.name) (Stack @loc.regTarget) @tl.binds
+
+ATTR CThunkBindL [ stackoffset : {Int} | | ]
+ATTR CThunkBindL [ env : {Environment} | protos : {[LuaBC.CPrototype]} | instr : {[LuaBC.CInstruction]} ]
+ATTR CThunkBindL [ | | maxstack : {Int} ]
+SEM CThunkBindL
+  | Cons lhs.protos = @lhs.protos ++ [@hd.prototype]
+  | Cons (loc.upvalinstr, loc.upvalmaxstack) = unzip $ map (\upval -> readEnv @lhs.env upval 0 @lhs.stackoffset) @hd.upvalues
+  | Cons lhs.maxstack = foldl max @tl.maxstack (@loc.regTarget : @loc.upvalmaxstack)
+  | Cons lhs.instr = 
+      [ LuaBC.CInstruction_Closure @loc.regTarget (length @lhs.protos)
+      ] ++
+      concat @loc.upvalinstr
+
+----
+-- Free and bound variable calculation
+----
+ATTR CTm CVal [ | | freevars : {Set.Set EnvironmentKey} ]
+ATTR CContBind CContBindL CThunkBind CThunkBindL [ | | freevars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} boundvars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} ]
+SEM CTm
+  | LetVal lhs.freevars = @bindvalue.freevars `Set.union` (Set.delete (valueName @bindname) @body.freevars)
+  -- TODO: Zijn let cont binds recursief? e.g. mag let cont k v = kv in ... ?
+  | LetCont lhs.freevars = @binds.freevars `Set.union` (@body.freevars `Set.difference` @binds.boundvars)
+  | LetThunk lhs.freevars = (@binds.freevars `Set.union` @body.freevars) `Set.difference` @binds.boundvars
+  | ContAppl lhs.freevars = Set.fromList [contName @cont, valueName @val]
+  | ThunkEval lhs.freevars = Set.fromList [thunkName @thunk, contName @cont]
+  | FuncAppl lhs.freevars = Set.fromList [valueName @func, contName @cont, thunkName @arg]
+  | Exit lhs.freevars = Set.fromList [valueName @val]
+SEM CVal
+  | IntVal StringVal lhs.freevars = Set.empty
+
+SEM CContBind
+  | ContBind lhs.boundvars = Set.fromList [contName @contname]
+  | ContBind lhs.freevars = Set.delete (valueName @valname) @body.freevars
+SEM CThunkBind
+  | ThunkBind lhs.boundvars = Set.fromList [thunkName @thunkname]
+  | ThunkBind lhs.freevars = Set.delete (contName @contname) @body.freevars
+
+
+
+ATTR CVal [ target : {Int} | consts : {LuaBC.CConstantL} protos : {LuaBC.CPrototypeL} | instr : {LuaBC.CInstructionL} maxstack : {Int} ]
+SEM CVal
+  | IntVal lhs.consts = @lhs.consts ++ [LuaBC.CConstant_Number $ fromIntegral @value]
+  | IntVal StringVal lhs.instr = [LuaBC.CInstruction_LoadK @lhs.target (length @lhs.consts)]
+  | IntVal StringVal lhs.maxstack = @lhs.target + 1
 %%]
