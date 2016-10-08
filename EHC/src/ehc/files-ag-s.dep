@@ -86,3 +86,4 @@ Core/ToCoreCPS.cag
 CoreCPS/Pretty.cag
 CoreCPS/ToLuaBC.cag
 LuaBC/Pretty.cag
+LuaBC/ToBinary.cag
