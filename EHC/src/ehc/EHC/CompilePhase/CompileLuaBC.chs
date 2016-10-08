@@ -12,15 +12,27 @@
 %%]
 %%[(8 core) import ({%{EH}Base.Target})
 %%]
+%%[(8 core) import ({%{EH}Base.Common})
+%%]
+%%[(8 core) import ({%{EH}CodeGen.Bits})
+%%]
+%%[(8 core) import ({%{EH}LuaBC.ToBinary})
+%%]
+%%[(8 core) import({%{EH}EHC.CompileUnit})
+%%]
 
 %%[(8 core) export(cpCompileLuaBC)
 cpCompileLuaBC :: EHCCompileRunner m => FinalCompileHow -> [HsName] -> HsName -> EHCompilePhaseT m ()
 cpCompileLuaBC how othModNmL modNm
   = do { cr <- get
        ; let (ecu,_,opts,fp) = crBaseInfo modNm cr
-             fpCl c = mkOutputFPath opts c (fpathSetBase (show c) fp) "lc"
+             fpChunk = mkOutputFPath opts modNm (fpathSetBase (show modNm) fp) "lc"
        ; when (targetIsLuaBC (ehcOptTarget opts))
-              (do { cpMsg modNm VerboseALot $ "Emit Lua BC: " ++ (fpathToStr fp)
+              (do { cpMsg modNm VerboseALot $ "Emit Lua BC: " ++ (fpathToStr fpChunk)
+                  ; liftIO $ fpathEnsureExists fpChunk
+                  ; let chunk = fromJust $ _ecuMbLuaBC ecu
+                        binaryChunk = chunk2binary chunk
+                  ; liftIO $ writeBinaryToFile (bytesToString binaryChunk) fpChunk
                   }
               )
        }

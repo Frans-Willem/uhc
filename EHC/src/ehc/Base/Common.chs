@@ -319,7 +319,7 @@ writeToFile = writeToFile' False
 
 %%]
 
-%%[(8 java) export(writeBinaryToFile)
+%%[(8 core) export(writeBinaryToFile)
 writeBinaryToFile :: String -> FPath -> IO ()
 writeBinaryToFile = writeToFile' True
 %%]
