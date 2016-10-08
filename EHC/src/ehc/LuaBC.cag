@@ -6,7 +6,7 @@
 %%[(8 core) hs module {%{EH}LuaBC} import()
 %%]
 
-%%[(8 core) hs export (CChunkHeader(..), CChunk(..), CVarArgFlag(..),CPrototype(..),CPrototypeL(..),CRegOrConst(..),CInstruction(..),CInstructionL(..),CConstant(..),CConstantL(..),CLocal(..),CLocalL(..), CUpvalue(..),CUpvalueL(..))
+%%[(8 core) hs export (CChunk(..), CVarArgFlag(..),CPrototype(..),CPrototypeL(..),CRegOrConst(..),CInstruction(..),CInstructionL(..),CConstant(..),CConstantL(..),CLocal(..),CLocalL(..))
 %%]
 
 %%[(8 core) ag import({LuaBC/AbsSyn})

@@ -4,98 +4,95 @@
 %%]
 
 %%[(8 core) ag
-DATA CChunkHeader
-	| ChunkHeader
-		majorVersion : {Int}
-		minorVersion : {Int}
-		formatVersion : {Int}
-		flagEndianness : {Int}
-		sizeofInt : {Int}
-		sizeofSizeT : {Int}
-		sizeofInstruction : {Int}
-		sizeofNumber : {Int}
-		flagIntegral : {Int}
-
 DATA CChunk
-	| Chunk
-		header : CChunkHeader
-		main : CPrototype
+  | Chunk
+    main : CPrototype
 
 DATA CVarArgFlag
-	| VarArgFlag
-		hasArg : {Bool}
-		isVarArg : {Bool}
-		needsArg : {Bool}
+  | VarArgFlag
+    hasArg : {Bool}
+    isVarArg : {Bool}
+    needsArg : {Bool}
 DATA CPrototype
-	| Prototype
-		sourceName : {String}
-		lineDefined : {String}
-		lastLineDefined : {String}
-		numUpvalues : {Int}
-		numParams : {Int}
-		flagVararg : CVarArgFlag
-		maxStackSize : {Int}
-		instructions : CInstructionL
-		constants : CConstantL
-		prototypes : CPrototypeL
-		sourcePos : {[Int]}
-		locals : CLocalL
-		upvalues : CUpvalueL		
+  | Prototype
+    sourceName : {String}
+    lineDefined : {Int}
+    lastLineDefined : {Int}
+    numUpvalues : {Int}
+    numParams : {Int}
+    flagVararg : CVarArgFlag
+    maxStackSize : {Int}
+    instructions : CInstructionL
+    constants : CConstantL
+    prototypes : CPrototypeL
+    sourcePos : {[Int]}
+    locals : CLocalL
+    upvalues : {[String]}
 TYPE CPrototypeL = [CPrototype]
 
 DATA CRegOrConst
-	| Reg index : {Int}
-	| Const index : {Int}
+  | Reg index : {Int}
+  | Const index : {Int}
 
 DATA CInstruction
-	| Move
-		regTarget : {Int}
-		regSource : {Int}
-	| LoadK
-		regTarget : {Int}
-		constSource : {Int}
-	| LoadBool
-		regTarget : {Int}
-		value : {Bool}
-		skipNext : {Bool}
-	| GetGlobal
-		regTarget : {Int}
-		constName : {Int}
-	| SetGlobal
-		regSource : {Int}
-		constName : {Int}
-	| GetUpval
-		regTarget: {Int}
-		upvalSource : {Int}
-	| SetUpval
-		regSource : {Int}
-		upvalTarget : {Int}
-	| GetTable
-		regTarget : {Int}
-		regTable : {Int}
-		rkKey : CRegOrConst
-	| SetTable
-		regTable : {Int}
-		rkKey : CRegOrConst
-		rkValue : CRegOrConst
+  | Move
+    regTarget : {Int}
+    regSource : {Int}
+  | LoadK
+    regTarget : {Int}
+    constSource : {Int}
+  | LoadBool
+    regTarget : {Int}
+    value : {Bool}
+    skipNext : {Bool}
+  | GetGlobal
+    regTarget : {Int}
+    constName : {Int}
+  | SetGlobal
+    regSource : {Int}
+    constName : {Int}
+  | GetUpval
+    regTarget: {Int}
+    upvalSource : {Int}
+  | SetUpval
+    regSource : {Int}
+    upvalTarget : {Int}
+  | GetTable
+    regTarget : {Int}
+    regTable : {Int}
+    rkKey : CRegOrConst
+  | SetTable
+    regTable : {Int}
+    rkKey : CRegOrConst
+    rkValue : CRegOrConst
+  | Return
+      regReturn : {Int}
+      numReturns : {Int}
+  | Call
+      regFunction : {Int}
+      numArguments : {Int}
+      numResults : {Int}
+  | TailCall
+      regFunction : {Int}
+      numArguments : {Int}
+  | Comment
+      data : {String}
+  | Closure
+      regTarget : {Int}
+      protoIndex : {Int}
 TYPE CInstructionL = [CInstruction]
 
 DATA CConstant
-	| Nil
-	| Boolean value : {Bool}
-	| Number value : {Double}
-	| String value : {String}
+  | Nil
+  | Boolean value : {Bool}
+  | Number value : {Double}
+  | String value : {String}
 TYPE CConstantL = [CConstant]
 
 DATA CLocal
-	| Local
-		varname : {String}
-		startpc : {Int}
-		endpc : {Int}
+  | Local
+    varname : {String}
+    startpc : {Int}
+    endpc : {Int}
 TYPE CLocalL = [CLocal]
-
-DATA CUpvalue
-	| Upvalue name : {String}
-TYPE CUpvalueL = [CUpvalue]
-
 %%]
