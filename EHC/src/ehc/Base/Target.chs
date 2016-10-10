@@ -111,6 +111,7 @@ data Target
 
   -- cps, lua bytecode
   | Target_Interpreter_CoreCPS_LuaBC       -- Lua bytecode based on CoreCPS, based on Core.
+  | Target_Interpreter_CoreCPS_MSCIL       -- MSCIL based on CoreCPS, based on Core.
 %%]]
   deriving ( Eq, Ord, Enum )
 %%]
@@ -137,6 +138,7 @@ instance Show Target where
   show Target_Interpreter_Grin_C			= "bc"
   show Target_FullProgAnal_Grin_CLR			= "clr"
   show Target_Interpreter_CoreCPS_LuaBC     = "luabc"
+  show Target_Interpreter_CoreCPS_MSCIL = "mscil"
 %%]]
 %%]
 
@@ -197,6 +199,7 @@ supportedTargetMp :: Map.Map String Target
 %%]]
 %%[[(8 core)
                  ++ [ mk Target_Interpreter_CoreCPS_LuaBC [FFIWay_CCall] ]
+                 ++ [ mk Target_Interpreter_CoreCPS_MSCIL [FFIWay_CCall] ]
 %%]]
           ]
         mk t ffis = (t,TargetInfo (FFIWay_Prim : ffis)) 
@@ -468,13 +471,20 @@ targetIsOnUnixAndOrC t
 {-# INLINE targetIsOnUnixAndOrC #-}
 %%]
 
-%%[(8 core) export(targetIsLuaBC)
+%%[(8 core) export(targetIsLuaBC, targetIsMSCIL)
 targetIsLuaBC :: Target -> Bool
 targetIsLuaBC t
   = case t of
       Target_Interpreter_CoreCPS_LuaBC -> True
       _ -> False
 {-# INLINE targetIsLuaBC #-}
+
+targetIsMSCIL :: Target -> Bool
+targetIsMSCIL t
+  = case t of
+      Target_Interpreter_CoreCPS_MSCIL -> True
+      _ -> False
+{-# INLINE targetIsMSCIL #-}
 %%]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

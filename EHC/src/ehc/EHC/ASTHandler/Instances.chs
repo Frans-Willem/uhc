@@ -87,6 +87,9 @@
 -- LuaBC output
 %%[(8 core) import({%{EH}LuaBC} as LuaBC, {%{EH}LuaBC.Pretty} as LuaBCPretty)
 %%]
+-- MSCIL output
+%%[(8 core) import({%{EH}MSCIL} as MSCIL, {%{EH}MSCIL.Pretty} as MSCILPretty)
+%%]
 
 -- serialization
 %%[50 import(qualified UHC.Util.Binary as Bin, UHC.Util.Serialize)
@@ -561,6 +564,27 @@ astHandler'_LuaBC =
             , _asthdlrPretty			= \opts ecu ast -> Just $
 					let ppMod = LuaBCPretty.ppCChunk ast
 					in  "//" >#< ecuModNm ecu >-< ppMod
+			}
+%%]
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% ASTHandler': MSCIL
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%[(8 core) export(astHandler'_MSCIL)
+astHandler'_MSCIL :: ASTHandler' AST_MSCIL
+astHandler'_MSCIL = 
+  emptyASTHandler'
+			{ _asthdlrName              = "MSCIL"
+            , _asthdlrASTLens           = Just ecuMbMSCIL
+            , _asthdlrSuffixRel			= mkASTSuffixRel
+            								[ ( (ASTFileContent_Text	, ASTFileUse_Target)		, ("il", ecuMbMSCIL, Nothing) )
+            								]
+			, _asthdlrEcuStore          = ecuStoreMSCIL
+			, _asthdlrMkOutputFPath           = \opts m f suff -> mkPerModuleOutputFPath opts True m f suff
+            , _asthdlrPretty			= \opts ecu ast -> Just $
+					let ppMod = MSCILPretty.ppAssembly ast
+					in  ppMod
 			}
 %%]
 

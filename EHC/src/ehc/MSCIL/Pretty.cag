@@ -1,0 +1,133 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% MSCIL Pretty Printer
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%[(8 core) hs module {%{EH}MSCIL.Pretty} import(UHC.Util.Pretty,{%{EH}MSCIL}, Numeric)
+%%]
+%%[(8 core) hs import({%{EH}Ty.Pretty})
+%%]
+
+%%[(8 core).WRAPPER ag import({MSCIL/AbsSyn})
+WRAPPER
+  Assembly
+%%]
+
+%%[(8 core) hs export(ppAssembly)
+ppAssembly :: Assembly -> PP_Doc
+ppAssembly chunk
+  = pp_Syn_Assembly t
+  where t = wrap_Assembly (sem_Assembly chunk)
+              (Inh_Assembly {})
+%%]
+
+%%[(8 core) ag
+ATTR Identifier [ | | pp : {PP_Doc} ]
+SEM Identifier
+  | Simple lhs.pp = text @name
+  | Dot lhs.pp = @parent.pp >|< text "." >|< @child.pp
+  | DoubleDot lhs.pp = @parent.pp >|< text "::" >|< @child.pp
+
+ATTR Assembly [ | | pp : {PP_Doc} ]
+SEM Assembly
+  | Assembly lhs.pp =
+      @imports.pp >-<
+      ".assembly" >#< @name >-<
+      text "{" >-< indent 2 (
+        text ".hash algorithm 0x" >|< (showHex @hashAlgorithm "") >-<
+        text ".ver" >#< (ppListSep "" "" ":" $ map (text . show) @version)
+      ) >-< text "}" >-<
+      @classes.pp >-<
+      @methods.pp
+
+ATTR ExternAssembly ExternAssemblyL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
+SEM ExternAssembly
+  | Assembly lhs.pp =
+      text ".assembly extern" >#< @name >-<
+      text "{" >-< indent 2 (
+        text ".ver" >#< (ppListSep "" "" ":" $ map (text . show) @version) >-<
+        text ".publickeytoken =" >#< (ppListSep "(" ")" " " $ map (\x -> text $ showHex x "") @publickeytoken)
+      ) >-<
+      text "}" 
+
+ATTR Type [ | | pp : {PP_Doc} ]
+SEM Type
+  | Void lhs.pp = text "void"
+  | Object lhs.pp = text "object"
+  | String lhs.pp = text "string"
+  | Class lhs.pp = @name.pp
+
+ATTR Variable VariableL [ | | pp : {PP_Doc} ]
+ATTR VariableL [ | | emptypp : {Bool} ]
+SEM VariableL
+  | Nil lhs.emptypp = True
+  | Nil lhs.pp = empty
+  | Cons lhs.emptypp = False
+  | Cons lhs.pp =
+      case @tl.emptypp of
+        True -> @hd.pp
+        False -> @hd.pp >|< text "," >#< @tl.pp
+
+SEM Variable
+  | Variable lhs.pp = @type.pp >|< @name.pp
+
+ATTR MbVarName [ | | pp : {PP_Doc} ]
+SEM MbVarName
+  | Nothing lhs.pp = empty 
+  | Just lhs.pp = text " " >|< @just.pp
+
+ATTR Method MethodL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
+SEM Method
+  | Method lhs.pp =
+      text ".method" >#<
+        (ppSpaces $ map text @modifiers) >#<
+        @returnType.pp >#<
+        @name.pp >|<
+        ppParens @arguments.pp >-<
+      text "{" >-<
+        indent 2 @instructions.pp >-<
+      text "}"
+
+ATTR Class ClassL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
+SEM Class
+  | Class lhs.pp =
+      text ".class" >#< (ppSpaces $ map text @modifiers) >#< @name.pp >|< @extends.pp >-<
+      text "{" >-<
+        indent 2 (@fields.pp >-< @methods.pp) >-<
+      text "}"
+ATTR MbExtends [ | | pp : {PP_Doc} ]
+SEM MbExtends
+  | Nothing lhs.pp = empty
+  | Just lhs.pp = text " extends" >#< @just.pp
+
+ATTR Field FieldL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
+SEM Field
+  | Field lhs.pp = 
+      text ".field" >#< (ppSpaces $ map text @modifiers) >#< @var.pp
+
+ATTR InstructionL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
+ATTR Instruction [ | | pp : {PP_Doc} ]
+SEM Instruction
+  | PseudoEntryPoint lhs.pp = text ".entrypoint"
+  | PseudoMaxStack lhs.pp = text ".maxstack" >#< (text $ show @size)
+  | PseudoLocals lhs.pp = ".locals init" >#< ppParens @locals.pp
+  | Ret lhs.pp = text "ret"
+  | LdArg lhs.pp = text "ldarg" >#< show @index
+  | LdStr lhs.pp = text "ldstr" >#< text "\"" >|< text @value >|< text "\""
+  | LdcI4 lhs.pp = text "ldc.i4" >#< show @value
+  | LdLoc lhs.pp =
+      if @index < 4
+        then text "ldloc." >|< (text $ show @index)
+        else text "ldloc" >#< (text $ show @index)
+  | StLoc lhs.pp = text "stloc" >#< show @index
+  | LdFld lhs.pp = text "ldfld" >#< @var.pp
+  | Tail lhs.pp = text "tail."
+  | CallVirt lhs.pp = text "callvirt" >#< (ppSpaces $ map text @modifiers) >#< @return.pp >#< @name.pp >|< ppParens @arguments.pp
+  | Call lhs.pp = text "call" >#< (ppSpaces $ map text @modifiers) >#< @return.pp >#< @name.pp >|< ppParens @arguments.pp
+  | NewObj lhs.pp = text "newobj" >#< (ppSpaces $ map text @modifiers) >#< @return.pp >#< @name.pp >|< ppParens @arguments.pp
+  | Box lhs.pp = text "box" >#< @name.pp
+%%]

@@ -82,6 +82,8 @@ level 2..6 : with prefix 'cpEhc'
 %%]
 %%[(8 core) import({%{EH}EHC.CompilePhase.CompileLuaBC})
 %%]
+%%[(8 core) import({%{EH}EHC.CompilePhase.CompileMSCIL})
+%%]
 %%[99 import({%{EH}Base.PackageDatabase})
 %%]
 %%[(99 codegen) import({%{EH}EHC.CompilePhase.Link})
@@ -1201,6 +1203,7 @@ cpEhcExecutablePerModule how impModNmL modNm
 %%]]
 %%[[(8 core)
            ++ [ cpCompileLuaBC how impModNmL modNm ]
+           ++ [ cpCompileMSCIL how impModNmL modNm ]
 %%]]
        }
 %%]
@@ -1525,6 +1528,10 @@ cpProcessCoreCPSRest modNm
               ( do { cpTranslateCoreCPS2LuaBC modNm
                    ; cpProcessLuaBC modNm
                    })
+       ; when (ehcOptIsMSCIL opts)
+              ( do { cpTranslateCoreCPS2MSCIL modNm
+                   ; cpProcessMSCIL modNm
+                   })
        }
 
 cpProcessLuaBC :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()
@@ -1532,4 +1539,8 @@ cpProcessLuaBC modNm
   = do { cpMsg modNm VerboseALot "cpProcessLuaBC: dumping first stage"
        ; void $ cpOutputLuaBC ASTFileContent_Text "-initial" modNm
        }
+
+cpProcessMSCIL :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()
+cpProcessMSCIL modNm
+  = return ()
 %%]

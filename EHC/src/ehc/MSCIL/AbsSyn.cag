@@ -1,0 +1,119 @@
+%%[(0 core)
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%[(8 core) hs import (Data.Bits)
+%%]
+%%[(8 core) ag
+DATA Identifier
+	| Simple
+		name : {String}
+	| Dot
+		parent : Identifier
+		child : Identifier
+	| DoubleDot
+		parent : Identifier
+		child : Identifier
+
+DATA Assembly
+	| Assembly
+		imports : ExternAssemblyL
+		name : String
+		hashAlgorithm : {Word}
+		version : {[Int]}
+		classes : ClassL
+		methods : MethodL
+
+DATA ExternAssembly
+	| Assembly
+		name : {String}
+		version : {[Int]}
+		publickeytoken : {[Int]}
+TYPE ExternAssemblyL = [ExternAssembly]
+
+DATA Type
+	| Void
+	| Object
+	| String
+	| Class
+		name : Identifier
+
+DATA Variable
+	| Variable
+		type : Type
+		name : MbVarName
+TYPE MbVarName = MAYBE Identifier
+TYPE VariableL = [Variable]
+
+DATA Method
+	| Method
+		modifiers : {[String]}
+		returnType : Type
+		name : Identifier
+		arguments : VariableL
+		instructions : InstructionL
+TYPE MethodL = [Method]
+
+DATA Class
+	| Class
+		modifiers : {[String]}
+		name : Identifier
+		extends : MbExtends
+		fields : FieldL
+		methods : MethodL
+TYPE ClassL = [Class]
+TYPE MbExtends = MAYBE Identifier
+
+DATA Field
+	| Field
+		modifiers : {[String]}
+		var : Variable
+TYPE FieldL = [Field]
+
+DATA Instruction
+	| PseudoEntryPoint
+	| PseudoMaxStack
+		size : {Int}
+	| PseudoLocals
+		locals : VariableL
+	| Ret
+	| LdArg
+		index : {Int}
+	| LdStr
+		value : {String}
+	| LdcI4
+		value : {Int}
+	| LdLoc
+		index : {Int}
+	| StLoc
+		index : {Int}
+	| LdFld
+		var : Variable
+	| StFld
+		var : Variable
+	| Tail
+	| CallVirt
+		modifiers : {[String]}
+		return : Type
+		name : Identifier
+		arguments : VariableL
+	| Call
+		modifiers : {[String]}
+		return : Type
+		name : Identifier
+		arguments : VariableL
+	| NewObj
+		modifiers : {[String]}
+		return : Type
+		name : Identifier
+		arguments : VariableL
+	| Box
+		name : Identifier
+TYPE InstructionL = [Instruction]
+%%]
+		
+	
+		
+		
+		

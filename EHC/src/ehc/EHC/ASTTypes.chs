@@ -62,6 +62,10 @@
 %%[(8 core) import(qualified {%{EH}LuaBC} as LuaBC)
 %%]
 
+-- MSCIL
+%%[(8 core) import(qualified {%{EH}MSCIL} as MSCIL)
+%%]
+
 -- HI Syntax and semantics, HS module semantics
 %%[50 import(qualified {%{EH}HI} as HI)
 %%]
@@ -150,5 +154,9 @@ type AST_CoreCPS = CoreCPS.CTm
 
 %%[(8 core) export(AST_LuaBC)
 type AST_LuaBC = LuaBC.CChunk
+%%]
+
+%%[(8 core) export(AST_MSCIL)
+type AST_MSCIL = MSCIL.Assembly
 %%]
 

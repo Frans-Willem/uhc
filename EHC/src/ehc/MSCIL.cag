@@ -1,0 +1,14 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%[(8 core) hs module {%{EH}MSCIL} import()
+%%]
+
+%%[(8 core) hs export (Identifier(..), Assembly(..), ExternAssembly(..), ExternAssemblyL(..), Type(..), Variable(..), MbVarName(..), VariableL(..), Method(..), MethodL(..), Class(..), ClassL(..), MbExtends(..), Field(..), FieldL(..), Instruction(..), InstructionL(..))
+%%]
+
+%%[(8 core) ag import({MSCIL/AbsSyn})
+%%]
+

@@ -85,5 +85,7 @@ JavaScript/Trf/CompactAndSimplify.cag
 Core/ToCoreCPS.cag
 CoreCPS/Pretty.cag
 CoreCPS/ToLuaBC.cag
+CoreCPS/ToMSCIL.cag
 LuaBC/Pretty.cag
 LuaBC/ToBinary.cag
+MSCIL/Pretty.cag
