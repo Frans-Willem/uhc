@@ -115,16 +115,19 @@ SEM Instruction
   | PseudoEntryPoint lhs.pp = text ".entrypoint"
   | PseudoMaxStack lhs.pp = text ".maxstack" >#< (text $ show @size)
   | PseudoLocals lhs.pp = ".locals init" >#< ppParens @locals.pp
+  | Comment lhs.pp = text "//" >#< text @data
   | Ret lhs.pp = text "ret"
   | LdArg lhs.pp = text "ldarg" >#< show @index
   | LdStr lhs.pp = text "ldstr" >#< text "\"" >|< text @value >|< text "\""
   | LdcI4 lhs.pp = text "ldc.i4" >#< show @value
+  | LdNull lhs.pp = text "ldnull"
   | LdLoc lhs.pp =
       if @index < 4
         then text "ldloc." >|< (text $ show @index)
         else text "ldloc" >#< (text $ show @index)
   | StLoc lhs.pp = text "stloc" >#< show @index
   | LdFld lhs.pp = text "ldfld" >#< @var.pp
+  | StFld lhs.pp = text "stfld" >#< @var.pp
   | Tail lhs.pp = text "tail."
   | CallVirt lhs.pp = text "callvirt" >#< (ppSpaces $ map text @modifiers) >#< @return.pp >#< @name.pp >|< ppParens @arguments.pp
   | Call lhs.pp = text "call" >#< (ppSpaces $ map text @modifiers) >#< @return.pp >#< @name.pp >|< ppParens @arguments.pp

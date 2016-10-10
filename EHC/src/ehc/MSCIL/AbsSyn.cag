@@ -77,6 +77,8 @@ DATA Instruction
 		size : {Int}
 	| PseudoLocals
 		locals : VariableL
+	| Comment
+		data : {String}
 	| Ret
 	| LdArg
 		index : {Int}
@@ -84,6 +86,7 @@ DATA Instruction
 		value : {String}
 	| LdcI4
 		value : {Int}
+	| LdNull
 	| LdLoc
 		index : {Int}
 	| StLoc
