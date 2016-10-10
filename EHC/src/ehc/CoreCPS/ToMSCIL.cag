@@ -83,7 +83,7 @@ readEnv :: Environment -> EnvironmentKey -> (MSCIL.InstructionL, Int)
 readEnv env key
   = case (Map.lookup key env) of
       Just x -> readVar x
-      Nothing -> error $ "Undefined variable: " ++ (show key)
+      Nothing -> ([MSCIL.Instruction_LdNull, MSCIL.Instruction_Comment $ "Undefined variable: " ++ (show key)], 1)
 
 environmentType :: EnvironmentKey -> MSCIL.Type
 environmentType (EnvironmentValue _) = MSCIL.Type_Object
@@ -115,6 +115,12 @@ thunkBase = MSCIL.Identifier_Simple "BaseThunk"
 
 thunkClassName :: ThunkName -> MSCIL.Identifier
 thunkClassName (ThunkName name) = MSCIL.Identifier_Simple $ "Thunk" ++ (show name)
+
+functionBase :: MSCIL.Identifier
+functionBase = MSCIL.Identifier_Simple "BaseFunction"
+
+functionClassName :: ValueName -> MSCIL.Identifier
+functionClassName (ValueName name) = MSCIL.Identifier_Simple $ "Function" ++ (show name)
 
 defaultClasses :: MSCIL.ClassL
 defaultClasses =
@@ -154,6 +160,26 @@ defaultClasses =
           [MSCIL.Variable_Variable (MSCIL.Type_Class continuationBase) $ Just (MSCIL.Identifier_Simple "k")]
           [MSCIL.Instruction_Ret]
       ]
+  , MSCIL.Class_Class
+      ["public","auto","ansi"]
+      functionBase
+      Nothing
+      []
+      [ MSCIL.Method_Method
+          ["public","specialname","rtspecialname","instance"]
+          MSCIL.Type_Void
+          (MSCIL.Identifier_Simple ".ctor")
+          []
+          [MSCIL.Instruction_Ret]
+      , MSCIL.Method_Method
+          ["public","virtual","newslot","instance"]
+          MSCIL.Type_Void
+          (MSCIL.Identifier_Simple "Invoke")
+          [ MSCIL.Variable_Variable (MSCIL.Type_Class continuationBase) $ Just (MSCIL.Identifier_Simple "k")
+          , MSCIL.Variable_Variable (MSCIL.Type_Class thunkBase) $ Just (MSCIL.Identifier_Simple "t")
+          ]
+          [MSCIL.Instruction_Ret]
+      ]
   ]
 
 %%]
@@ -176,7 +202,10 @@ SEM CTm
       @body.instr
   | LetVal lhs.localoffset = @lhs.localoffset + 1
   | LetVal lhs.locals = (environmentVariable @loc.valname) : @body.locals
-ATTR CVal [ maxstack : {Int} | | instr : {MSCIL.InstructionL} ]
+  | LetVal bindvalue.name = @bindname
+ATTR CVal [ name : {ValueName} maxstack : {Int} | | instr : {MSCIL.InstructionL} ]
+ATTR CVal [ | | classes USE {++} {[]} : {MSCIL.ClassL} ]
+ATTR CVal [ env : {Environment} | | ]
 SEM CVal
   | IntVal lhs.instr =
       [ MSCIL.Instruction_LdcI4 @value
@@ -184,7 +213,62 @@ SEM CVal
       ]
   | StringVal lhs.instr = [MSCIL.Instruction_LdStr @value]
   | IntVal StringVal lhs.maxstack = 1
--- TODO: Function values
+  | LamVal loc.classname = functionClassName @lhs.name
+  | LamVal loc.contenv = contName @bindcont
+  | LamVal loc.thunkenv = thunkName @bindarg
+  | LamVal loc.upvalues = Set.toList $ (@body.freevars `Set.difference` (Set.fromList [@loc.contenv, @loc.thunkenv]))
+  | LamVal lhs.classes =
+      [ MSCIL.Class_Class
+          ["public","auto","ansi"]
+          @loc.classname
+          (Just functionBase)
+          (map environmentField @loc.upvalues)
+          [ MSCIL.Method_Method
+              ["public","specialname","rtspecialname","instance"]
+              MSCIL.Type_Void
+              (MSCIL.Identifier_Simple ".ctor")
+              (map environmentVariable @loc.upvalues)
+              (
+                [  MSCIL.Instruction_LdArg 0
+                , MSCIL.Instruction_Call ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot functionBase (MSCIL.Identifier_Simple ".ctor")) []
+                ] ++
+                ( concat $ map
+                    (\(upval, index) -> 
+                      [ MSCIL.Instruction_LdArg 0
+                      , MSCIL.Instruction_LdArg index
+                      , MSCIL.Instruction_StFld (environmentMember @loc.classname upval)
+                      ]
+                    )
+                    (zip @loc.upvalues [1..])
+                ) ++ 
+                [ MSCIL.Instruction_Ret ]
+              )
+          , MSCIL.Method_Method
+              ["family","virtual","instance"]
+              MSCIL.Type_Void
+              (MSCIL.Identifier_Simple "Invoke")
+              [ MSCIL.Variable_Variable (MSCIL.Type_Class continuationBase) $ Just (environmentIdentifier @loc.contenv)
+              , MSCIL.Variable_Variable (MSCIL.Type_Class thunkBase) $ Just (environmentIdentifier @loc.thunkenv)
+              ]
+              ( MSCIL.Instruction_PseudoMaxStack @body.maxstack
+              : MSCIL.Instruction_PseudoLocals @body.locals
+              : @body.instr
+              )
+          ]
+      ] ++ @body.classes
+  | LamVal body.localoffset = 0
+  | LamVal body.env =
+      Map.fromList $
+        (@loc.contenv, Argument 1) :
+        (@loc.thunkenv, Argument 2) :
+        (zip @loc.upvalues $ map (Field . (environmentMember @loc.classname)) @loc.upvalues)
+  | LamVal (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @lhs.env) @loc.upvalues
+  | LamVal lhs.instr =
+      (concat @loc.upvalueinstr) ++
+      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) $ map environmentVariable @loc.upvalues
+      ]
+  | LamVal lhs.maxstack = foldr max 1 (zipWith (+) @loc.upvaluemaxstack [0..])
+    
 ----
 -- LetCont
 ----
@@ -239,13 +323,14 @@ SEM CContBind
               : @body.instr
               )
           ]
-      ]
+      ] ++ @body.classes
+  | ContBind (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @lhs.env) @loc.upvalues
   | ContBind lhs.instr = 
-      (map (\_ -> error "TODO: PASS UPVALUES") @loc.upvalues) ++
-      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) []
+      (concat @loc.upvalueinstr) ++
+      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) (map environmentVariable @loc.upvalues)
       , MSCIL.Instruction_StLoc @lhs.localoffset
       ]
-  | ContBind lhs.maxstack = (length @loc.upvalues) + 1
+  | ContBind lhs.maxstack = foldr max ((length @loc.upvalues) + 1) (zipWith (+) @loc.upvaluemaxstack [0..])
   | ContBind body.localoffset = 0
   | ContBind body.env =
       Map.fromList $
@@ -328,13 +413,14 @@ SEM CThunkBind
               : @body.instr
               )
           ]
-      ]
+      ] ++ @body.classes
+  | ThunkBind (loc.nonrecupvalinstr, loc.nonrecupvalmaxstack) = unzip $ map (readEnv @lhs.env) @loc.nonrecupvalues
   | ThunkBind lhs.allocinstr = 
-      (map (\_ -> error "TODO: PASS Non-recursive UPVALUES") @loc.nonrecupvalues) ++
-      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) []
+      (concat @loc.nonrecupvalinstr) ++
+      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) (map environmentVariable @loc.nonrecupvalues)
       , MSCIL.Instruction_StLoc @lhs.localoffset
       ]
-  | ThunkBind lhs.allocmaxstack = (length @loc.upvalues) + 1
+  | ThunkBind lhs.allocmaxstack = foldr max ((length @loc.upvalues) + 1) (zipWith (+) @loc.nonrecupvalmaxstack [0..])
   | ThunkBind body.localoffset = 0
   | ThunkBind body.env =
       Map.fromList $
@@ -343,6 +429,8 @@ SEM CThunkBind
         (zip @loc.allupvalues $ map (Field . (environmentMember @loc.classname)) @loc.allupvalues)
 
 ATTR CThunkBind CThunkBindL [ | | fixupinstr USE {++} {[]} : {MSCIL.InstructionL} fixupmaxstack USE {max} {0} : {Int} ]
+SEM CThunkBind
+  | ThunkBind lhs.fixupinstr = map (\_ -> error "TODO: Pass recursive upvalues") @loc.recupvalues
 
 ----
 -- ContAppl
@@ -359,7 +447,10 @@ SEM CTm
       , MSCIL.Instruction_CallVirt ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot continuationBase (MSCIL.Identifier_Simple "Invoke")) [MSCIL.Variable_Variable MSCIL.Type_Object Nothing]
       , MSCIL.Instruction_Ret
       ]
-  | ContAppl lhs.maxstack = max @loc.contmaxstack (1 + @loc.valmaxstack)
+  | ContAppl lhs.maxstack =
+      @loc.contmaxstack `max`
+      (@loc.valmaxstack + 1) `max`
+      2
 
 ----
 -- ThunkEval
@@ -376,7 +467,33 @@ SEM CTm
       , MSCIL.Instruction_CallVirt ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot thunkBase (MSCIL.Identifier_Simple "Eval")) [MSCIL.Variable_Variable (MSCIL.Type_Class continuationBase) Nothing]
       , MSCIL.Instruction_Ret
       ]
-  | ThunkEval lhs.maxstack = max @loc.thunkmaxstack (1 + @loc.contmaxstack)
+  | ThunkEval lhs.maxstack =
+      @loc.thunkmaxstack `max`
+      (@loc.contmaxstack + 1) `max`
+      2
+
+----
+-- FuncAppl
+----
+SEM CTm
+  | FuncAppl lhs.locals = []
+  | FuncAppl loc.funcenv = valueName @func
+  | FuncAppl loc.contenv = contName @cont
+  | FuncAppl loc.argenv = thunkName @arg
+  | FuncAppl (loc.funcinstr, loc.funcmaxstack) = readEnv @lhs.env @loc.funcenv
+  | FuncAppl (loc.continstr, loc.contmaxstack) = readEnv @lhs.env @loc.contenv
+  | FuncAppl (loc.arginstr, loc.argmaxstack) = readEnv @lhs.env @loc.argenv
+  | FuncAppl lhs.instr =
+      @loc.funcinstr ++ @loc.continstr ++ @loc.arginstr ++
+      [ MSCIL.Instruction_Tail
+      , MSCIL.Instruction_CallVirt ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot functionBase (MSCIL.Identifier_Simple "Invoke")) [MSCIL.Variable_Variable (MSCIL.Type_Class continuationBase) Nothing, MSCIL.Variable_Variable (MSCIL.Type_Class thunkBase) Nothing]
+      , MSCIL.Instruction_Ret
+      ]
+  | FuncAppl lhs.maxstack =
+      @loc.funcmaxstack `max`
+      (@loc.contmaxstack + 1) `max`
+      (@loc.argmaxstack + 2) `max`
+      3
 
 ---
 -- Exit
@@ -411,6 +528,7 @@ SEM CTm
   | Exit lhs.freevars = Set.fromList [valueName @val]
 SEM CVal
   | IntVal StringVal lhs.freevars = Set.empty
+  | LamVal lhs.freevars = @body.freevars `Set.difference` (Set.fromList [contName @bindcont, thunkName @bindarg])
 
 SEM CContBind
   | ContBind lhs.boundvars = Set.fromList [contName @contname]
