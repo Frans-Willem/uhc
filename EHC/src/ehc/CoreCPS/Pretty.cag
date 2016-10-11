@@ -53,11 +53,7 @@ SEM CTm
   | Exit lhs.pp = @val >#< text "(exit)"
   | Case lhs.pp =
       (text "case" >#< @val >#< text "of") >-<
-      indent 2
-        ( @branches.pp
-        >-< text "default =>"
-        >-< indent 2 @default.pp
-        )
+      indent 2 @branches.pp
 
 ATTR CThunkBindL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
 ATTR CThunkBind [ | | pp : {PP_Doc} ]
@@ -76,7 +72,7 @@ SEM CVal
 ATTR CCaseBranchL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
 ATTR CCasePattern [ | | pp : {PP_Doc} ]
 SEM CCasePattern
-  | Var lhs.pp = pp @thunkname
+  | Default lhs.pp = text "default"
   | Tag lhs.pp = text "#Tag" >#< (ppSpaces ((pp @tag) : map pp @args))
   | Int lhs.pp = text $ show @value
 ATTR CCaseBranch [ | | pp : {PP_Doc} ]

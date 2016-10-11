@@ -22,7 +22,7 @@ DATA CThunkBind
 TYPE CThunkBindL = [CThunkBind]
 
 DATA CCasePattern
-  | Var thunkname : {ThunkName}
+  | Default
   | Tag
       tag : {CTag}
       rest : CCasePatternRest
@@ -64,5 +64,4 @@ DATA CTm
   | Case
       val : {ValueName}
       branches : CCaseBranchL
-      default : CTm
 %%]

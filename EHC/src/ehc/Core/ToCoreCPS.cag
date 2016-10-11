@@ -59,9 +59,9 @@ is replaced by synthesized attribute cpsValueName and cpsThunkName,
 and inherited attribute (relying on the synthesized attribute) cpsContent
 -}
 ATTR CExpr CBind CBound CBindL CBoundL [ cpsScheme : {CPSTranslationScheme} cpsContent : {CPS.CTm} cpsContName : {CPS.ContName} | | cpsTrans : {CPS.CTm} cpsValueName : {CPS.ValueName} cpsThunkName : {CPS.ThunkName} ]
-ATTR CExpr CBind CBound CBindL CBoundL CAlt CAltL [ | cpsFreshValueCounter : {Int} | ]
-ATTR CExpr CBind CBound CBindL CBoundL CAlt CAltL [ | cpsFreshThunkCounter : {Int} | ]
-ATTR CExpr CBind CBound CBindL CBoundL CAlt CAltL [ | cpsFreshContCounter : {Int} | ]
+ATTR CExpr CBind CBound CBindL CBoundL CAlt CAltL CPat [ | cpsFreshValueCounter : {Int} | ]
+ATTR CExpr CBind CBound CBindL CBoundL CAlt CAltL CPat [ | cpsFreshThunkCounter : {Int} | ]
+ATTR CExpr CBind CBound CBindL CBoundL CAlt CAltL CPat [ | cpsFreshContCounter : {Int} | ]
 
 {- Let transformation -}
 SEM CExpr
@@ -295,8 +295,10 @@ SEM CExpr
         CPSTranslationScheme_ContinuationCall -> @lhs.cpsContName
         _ -> @loc.cpsFreshContName
   | Case expr.cpsScheme = CPSTranslationScheme_Value
+  | Case loc.defaultBranch =
+      CPS.CCaseBranch_CaseBranch CPS.CCasePattern_Default @dflt.cpsTrans
   | Case expr.cpsContent =
-      CPS.CTm_Case @expr.cpsValueName @alts.cpsTrans @dflt.cpsTrans
+      CPS.CTm_Case @expr.cpsValueName (@alts.cpsTrans  ++ [@loc.defaultBranch])
   | Case dflt.cpsScheme = CPSTranslationScheme_ContinuationCall
   | Case dflt.cpsContName = @loc.cpsBranchContinue
   | Case alts.cpsContName = @loc.cpsBranchContinue
@@ -313,16 +315,34 @@ SEM CExpr
 
 ATTR CAltL [ cpsContName : {CPS.ContName} | | cpsTrans USE {:} {[]} : {CPS.CCaseBranchL} ]
 ATTR CAlt [ cpsContName : {CPS.ContName} | | cpsTrans : {CPS.CCaseBranch} ]
+ATTR CAlt [ cpsValueName : {CPS.ValueName} | | ]
 SEM CAlt
-  | Alt lhs.cpsTrans = CPS.CCaseBranch_CaseBranch @pat.cpsTrans @expr.cpsTrans
+  | Alt pat.cpsValueName = @lhs.cpsValueName
+  | Alt pat.cpsContent = @expr.cpsTrans
+  | Alt lhs.cpsTrans = CPS.CCaseBranch_CaseBranch @pat.cpsPattern @pat.cpsTrans
   | Alt expr.cpsScheme = CPSTranslationScheme_ContinuationCall
   | Alt expr.cpsContName = @lhs.cpsContName
 
-ATTR CPat [ | | cpsTrans : {CPS.CCasePattern} ]
+ATTR CPat [ | | cpsPattern : {CPS.CCasePattern} ]
+ATTR CPat [ cpsContent : {CPS.CTm} | | cpsTrans : {CPS.CTm} ]
+ATTR CPat [ cpsValueName : {CPS.ValueName} | | ]
 SEM CPat
-  | Var lhs.cpsTrans = CPS.CCasePattern_Var (createThunkName @pnm)
-  | Con lhs.cpsTrans = CPS.CCasePattern_Tag @tag @rest.cpsTrans @binds.cpsTrans
-  | Int lhs.cpsTrans = CPS.CCasePattern_Int @int
+  | Var lhs.cpsPattern = CPS.CCasePattern_Default
+  | Con lhs.cpsPattern = CPS.CCasePattern_Tag @tag @rest.cpsTrans @binds.cpsTrans
+  | Int lhs.cpsPattern = CPS.CCasePattern_Int @int
+  | Var loc.cpsFreshContNumber : UNIQUEREF cpsFreshContCounter
+  | Var loc.cpsFreshContName = createFreshContName @loc.cpsFreshContNumber
+
+  | Var lhs.cpsTrans =
+      CPS.CTm_LetThunk
+        [
+          CPS.CThunkBind_ThunkBind
+            (createThunkName @pnm)
+            @loc.cpsFreshContName
+          (CPS.CTm_ContAppl @loc.cpsFreshContName @lhs.cpsValueName)
+        ]
+        @lhs.cpsContent
+  | * - Var lhs.cpsTrans = @lhs.cpsContent
 
 ATTR CPatRest [ | | cpsTrans : {CPS.CCasePatternRest} ]
 SEM CPatRest
