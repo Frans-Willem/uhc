@@ -21,6 +21,21 @@ DATA CThunkBind
       body : CTm
 TYPE CThunkBindL = [CThunkBind]
 
+DATA CCasePattern
+  | Var thunkname : {ThunkName}
+  | Tag
+      tag : {CTag}
+      rest : CCasePatternRest
+      args : {[ThunkName]}
+  | Int value : {Int}
+TYPE CCasePatternRest = MAYBE ThunkName
+
+DATA CCaseBranch
+  | CaseBranch
+      pat : CCasePattern
+      body : CTm
+TYPE CCaseBranchL = [CCaseBranch]
+
 DATA CTm
   | LetVal
       bindname : {ValueName}
@@ -46,4 +61,8 @@ DATA CTm
       arg : {ThunkName}
   | Exit
       val : {ValueName}
+  | Case
+      val : {ValueName}
+      branches : CCaseBranchL
+      default : CTm
 %%]
