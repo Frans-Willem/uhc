@@ -27,7 +27,7 @@ cps2cil tm
       "tempname"
       0x8004
       [0,0,0,0]
-      (defaultClasses ++ (classes_Syn_CTm t))
+      (defaultClasses ++ (classes_Syn_CTm t) ++ (createTagClasses $ tags_Syn_CTm t))
       [ MSCIL.Method_Method
           ["static"]
           MSCIL.Type_Void
@@ -182,9 +182,55 @@ defaultClasses =
       ]
   ]
 
+tagClassName :: CTag -> Int -> MSCIL.Identifier
+tagClassName tag arguments = MSCIL.Identifier_Simple $ (show tag) ++ (show arguments)
+
+tagFieldName :: Int -> MSCIL.Identifier
+tagFieldName n = MSCIL.Identifier_Simple $ "field" ++ (show n)
+
+createTagClass :: CTag -> Int -> MSCIL.Class
+createTagClass tag arguments =
+  MSCIL.Class_Class
+    ["public","auto","ansi"]
+    classname
+    Nothing
+    argfields
+    [ MSCIL.Method_Method
+        ["public","specialname","rtspecialname","instance"]
+        MSCIL.Type_Void
+        (MSCIL.Identifier_Simple ".ctor")
+        argvars
+        (
+          [ MSCIL.Instruction_PseudoMaxStack 2
+          ] ++
+          storeinstrs ++ 
+          [ MSCIL.Instruction_Ret
+          ]
+        )
+    ]
+  where
+    classname = tagClassName tag arguments
+    argnames = map tagFieldName [1..arguments]
+    argvars = map (\a -> MSCIL.Variable_Variable (MSCIL.Type_Class thunkBase) $ Just a) argnames
+    argfields = map (MSCIL.Field_Field ["public"]) argvars
+    storeinstrs = concat $ map storeinstr (zip argnames [1..])
+    storeinstr (fieldname, index) =
+      [ MSCIL.Instruction_LdArg 0
+      , MSCIL.Instruction_LdArg index
+      , MSCIL.Instruction_StFld (MSCIL.Variable_Variable (MSCIL.Type_Class thunkBase) $ Just (MSCIL.Identifier_DoubleDot classname fieldname))
+      ]
+
+createTagClasses :: (Set.Set (CTag, Int)) -> [MSCIL.Class]
+createTagClasses s
+  = map (\(tag, args) -> createTagClass tag args) $ Set.toList s
 %%]
 
 %%[(8 core) ag
+
+ATTR CTm CVal CContBind CContBindL CThunkBind CThunkBindL [ | | tags USE {Set.union} {Set.empty} : {Set.Set (CTag,Int)} ]
+SEM CVal
+  | TagVal lhs.tags = Set.singleton (@tag,length @args)
+
 ATTR CTm [ env : {Environment} | | ]
 ATTR CTm [ | | instr USE {++} {[]} : {MSCIL.InstructionL} ]
 ATTR CTm [ | | classes USE {++} {[]} : {MSCIL.ClassL} ]
@@ -267,7 +313,16 @@ SEM CVal
       (concat @loc.upvalueinstr) ++
       [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) $ map environmentVariable @loc.upvalues
       ]
-  | LamVal lhs.maxstack = foldr max 1 (zipWith (+) @loc.upvaluemaxstack [0..])
+  | LamVal lhs.maxstack = foldr max (length @loc.upvalues) (zipWith (+) @loc.upvaluemaxstack [0..])
+SEM CVal
+  | TagVal loc.classname = tagClassName @tag $ length @args
+  | TagVal loc.argenv = map thunkName @args
+  | TagVal (loc.arginstr, loc.argmaxstack) = unzip $ map (readEnv @lhs.env) @loc.argenv
+  | TagVal lhs.instr =
+      (concat @loc.arginstr) ++ 
+      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) $ map environmentVariable @loc.argenv
+      ]
+  | TagVal lhs.maxstack = foldr max (length @args) (zipWith (+) @loc.argmaxstack [0..])
     
 ----
 -- LetCont
@@ -529,6 +584,7 @@ SEM CTm
 SEM CVal
   | IntVal StringVal lhs.freevars = Set.empty
   | LamVal lhs.freevars = @body.freevars `Set.difference` (Set.fromList [contName @bindcont, thunkName @bindarg])
+  | TagVal lhs.freevars = Set.fromList $ map thunkName @args
 
 SEM CContBind
   | ContBind lhs.boundvars = Set.fromList [contName @contname]
