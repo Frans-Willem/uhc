@@ -130,7 +130,7 @@ SEM CExpr
       case @lhs.cpsScheme of
         CPSTranslationScheme_Value ->
           CPS.CTm_LetCont
-            [CPS.CContBind_ContBind @loc.cpsFreshContName @loc.cpsValueName @lhs.cpsContent]
+            @loc.cpsFreshContName @loc.cpsValueName @lhs.cpsContent
             (CPS.CTm_ThunkEval @loc.cpsThunkName @loc.cpsFreshContName)
         CPSTranslationScheme_ContinuationCall ->
           CPS.CTm_ThunkEval @loc.cpsThunkName @lhs.cpsContName
@@ -209,7 +209,7 @@ SEM CExpr
           case @lhs.cpsScheme of
             CPSTranslationScheme_Value ->
               CPS.CTm_LetCont
-                [CPS.CContBind_ContBind @loc.cpsAppContName @loc.cpsValueName @lhs.cpsContent]
+                @loc.cpsAppContName @loc.cpsValueName @lhs.cpsContent
                 (CPS.CTm_FuncAppl
                   @func.cpsValueName
                   @loc.cpsAppContName
@@ -281,6 +281,14 @@ SEM CExpr
 SEM CBound
   | Val expr.tagArgs = []
         
+{- Case transformation -}
+{-
+SEM CExpr
+  | Case lhs.cpsTrans =
+      case @lhs.cpsScheme of
+        CPSTranslationScheme_Value ->
+-}
+          
 %%]
 
 %%[(8 core) hs

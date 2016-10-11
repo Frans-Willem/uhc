@@ -20,12 +20,6 @@ DATA CThunkBind
       contname : {ContName}
       body : CTm
 TYPE CThunkBindL = [CThunkBind]
-DATA CContBind
-  | ContBind
-      contname : {ContName}
-      valname : {ValueName}
-      body : CTm
-TYPE CContBindL = [CContBind]
 
 DATA CTm
   | LetVal
@@ -33,7 +27,9 @@ DATA CTm
       bindvalue : CVal
       body : CTm
   | LetCont
-      binds : CContBindL
+      contname : {ContName}
+      valname : {ValueName}
+      bindbody : CTm
       body : CTm
   | LetThunk
      binds : CThunkBindL 

@@ -6,7 +6,7 @@
 %%[(8 core) hs module {%{EH}CoreCPS} import()
 %%]
 
-%%[(8 core) hs export( CVal(..), CTm(..), CThunkBind(..), CThunkBindL, CContBind(..), CContBindL, ValueName(..), ContName(..), ThunkName(..), CTag(..))
+%%[(8 core) hs export( CVal(..), CTm(..), CThunkBind(..), CThunkBindL(..), ValueName(..), ContName(..), ThunkName(..), CTag(..))
 %%]
 
 %%[(8 core) hs import({%{EH}CodeGen.Tag})

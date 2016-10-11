@@ -127,17 +127,47 @@ SEM CTm
 ----
 -- LetCont
 ----
-  | LetCont binds.target = @lhs.stackoffset
-  | LetCont binds.stackoffset = @binds.target
-  | LetCont body.stackoffset = @binds.target
-  | LetCont loc.env = Map.union @lhs.env @binds.binds
+  | LetCont loc.regTarget = @lhs.stackoffset
+  | LetCont lhs.stackoffset = @lhs.stackoffset + 1
+  | LetCont loc.contenv = contName @contname
+  | LetCont loc.valenv = valueName @valname
+  | LetCont loc.upvalues = Set.toList $ Set.delete @loc.valenv @bindbody.freevars
+  | LetCont loc.prototype = 
+      LuaBC.CPrototype_Prototype
+        (show @loc.contenv)
+        0 0
+        (length @loc.upvalues)
+        1
+        (LuaBC.CVarArgFlag_VarArgFlag False False False)
+        (@bindbody.maxstack + 1)
+        @bindbody.instr
+        @bindbody.consts
+        @bindbody.protos
+        []
+        []
+        (map show @loc.upvalues)
+  | LetCont loc.protoindex = length @lhs.protos
+  | LetCont lhs.prototypes = @lhs.protos ++ [@loc.prototype]
+  | LetCont bindbody.protos = []
+  | LetCont bindbody.consts = []
+  | LetCont bindbody.stackoffset = 1
+  | LetCont loc.bindenv =
+      (@loc.valenv, Stack 0) : (zip @loc.upvalues (map Upvalue [0..]))
+  | LetCont bindbody.env = Map.fromList @loc.bindenv
+  | LetCont loc.env = Map.insert @loc.contenv (Stack @loc.regTarget) @lhs.env
+  | LetCont (loc.upvalinstr, loc.upvalmaxstack) = unzip $ map (\upval -> readEnv @lhs.env upval 0 @lhs.stackoffset) @loc.upvalues
+  | LetCont lhs.instr =
+      [ LuaBC.CInstruction_Closure @loc.regTarget @loc.protoindex ] ++
+      (concat @loc.upvalinstr) ++
+      @body.instr
+  | LetCont lhs.maxstack = foldr max @body.maxstack (@loc.regTarget : @loc.upvalmaxstack)
 ----
 -- LetThunk
 ----
   | LetThunk binds.target = @lhs.stackoffset
   | LetThunk binds.stackoffset = @binds.target
   | LetThunk body.stackoffset = @binds.target
-  | LetThunk loc.env = Map.union @lhs.env @binds.binds
+  | LetThunk loc.env = Map.union @binds.binds @lhs.env
 ----
 -- Exit
 ----
@@ -155,51 +185,6 @@ SEM CTm
       ] ++
       [LuaBC.CInstruction_Return @loc.regTarget 2]
   | Exit lhs.maxstack = max @loc.valmaxstack @loc.regArg
-
-ATTR CContBind [ | | name : {ContName} prototype : {LuaBC.CPrototype} upvalues : {[EnvironmentKey]}]
-SEM CContBind
-  | ContBind lhs.name = @contname
-  | ContBind loc.upvalues = Set.toList $ @body.freevars `Set.difference` (Set.fromList [contName @contname, valueName @valname])
-  | ContBind lhs.prototype =
-      LuaBC.CPrototype_Prototype
-        (show $ contName @contname)
-        0 0
-        (length @loc.upvalues)
-        1 -- numParams
-        (LuaBC.CVarArgFlag_VarArgFlag False False False)
-        (@body.maxstack + 1)
-        @body.instr
-        @body.consts
-        @body.protos
-        []
-        []
-        (map show @loc.upvalues)
-  | ContBind body.protos = []
-  | ContBind body.consts = []
-  | ContBind loc.envList =
-      zip @loc.upvalues (map Upvalue [0..]) ++
-      [(valueName @valname, Stack 0)]
-  | ContBind body.env = Map.fromList @loc.envList
-  | ContBind body.stackoffset = 1
-
-ATTR CContBindL [ | target : {Int} | binds : {Environment} ]
-SEM CContBindL
-  | Nil lhs.binds = Map.empty
-  | Cons loc.regTarget = @lhs.target
-  | Cons tl.target = @lhs.target + 1
-  | Cons lhs.binds = Map.insert (contName @hd.name) (Stack @loc.regTarget) @tl.binds
-
-ATTR CContBindL [ stackoffset : {Int} | | ]
-ATTR CContBindL [ env : {Environment} | protos : {[LuaBC.CPrototype]} | instr : {[LuaBC.CInstruction]} ]
-ATTR CContBindL [ | | maxstack : {Int} ]
-SEM CContBindL
-  | Cons lhs.protos = @lhs.protos ++ [@hd.prototype]
-  | Cons (loc.upvalinstr, loc.upvalmaxstack) = unzip $ map (\upval -> readEnv @lhs.env upval 0 @lhs.stackoffset) @hd.upvalues
-  | Cons lhs.maxstack = foldl max @tl.maxstack (@loc.regTarget : @loc.upvalmaxstack)
-  | Cons lhs.instr =
-      [ LuaBC.CInstruction_Closure @loc.regTarget (length @lhs.protos)
-      ] ++
-      concat @loc.upvalinstr
 
 ATTR CThunkBind [ | | name : {ThunkName} prototype : {LuaBC.CPrototype} upvalues : {[EnvironmentKey]} ]
 SEM CThunkBind
@@ -250,11 +235,11 @@ SEM CThunkBindL
 -- Free and bound variable calculation
 ----
 ATTR CTm CVal [ | | freevars : {Set.Set EnvironmentKey} ]
-ATTR CContBind CContBindL CThunkBind CThunkBindL [ | | freevars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} boundvars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} ]
+ATTR CThunkBind CThunkBindL [ | | freevars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} boundvars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} ]
 SEM CTm
   | LetVal lhs.freevars = @bindvalue.freevars `Set.union` (Set.delete (valueName @bindname) @body.freevars)
   -- TODO: Zijn let cont binds recursief? e.g. mag let cont k v = kv in ... ?
-  | LetCont lhs.freevars = @binds.freevars `Set.union` (@body.freevars `Set.difference` @binds.boundvars)
+  | LetCont lhs.freevars = (Set.delete @loc.valenv @bindbody.freevars) `Set.union` (Set.delete @loc.contenv @body.freevars)
   | LetThunk lhs.freevars = (@binds.freevars `Set.union` @body.freevars) `Set.difference` @binds.boundvars
   | ContAppl lhs.freevars = Set.fromList [contName @cont, valueName @val]
   | ThunkEval lhs.freevars = Set.fromList [thunkName @thunk, contName @cont]
@@ -263,9 +248,6 @@ SEM CTm
 SEM CVal
   | IntVal StringVal lhs.freevars = Set.empty
 
-SEM CContBind
-  | ContBind lhs.boundvars = Set.fromList [contName @contname]
-  | ContBind lhs.freevars = Set.delete (valueName @valname) @body.freevars
 SEM CThunkBind
   | ThunkBind lhs.boundvars = Set.fromList [thunkName @thunkname]
   | ThunkBind lhs.freevars = Set.delete (contName @contname) @body.freevars

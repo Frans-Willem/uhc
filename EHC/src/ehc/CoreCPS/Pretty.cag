@@ -43,7 +43,7 @@ SEM CTm
       = (text "let val" >#< @bindname >#< text "=" >#< @bindvalue.pp)
         >-< (text "in" >#< @body.pp)
   | LetCont lhs.pp
-      = (text "let cont" >#< @binds.pp)
+      = (text "let cont" >#< @contname >#< @valname >#< text "=" >#< @bindbody.pp)
         >-< (text "in" >#< @body.pp)
   | LetThunk lhs.pp
       = (text "let thunk" >#< @binds.pp) >-< (text "in" >#< @body.pp)
@@ -56,11 +56,6 @@ ATTR CThunkBindL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
 ATTR CThunkBind [ | | pp : {PP_Doc} ]
 SEM CThunkBind
   | ThunkBind lhs.pp = @thunkname >#< @contname >#< (text "=") >#< @body.pp 
-
-ATTR CContBindL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
-ATTR CContBind [ | | pp : {PP_Doc} ]
-SEM CContBind
-  | ContBind lhs.pp = @contname >#< @valname >#< text "=" >#< @body.pp
 
 ATTR CVal [ | | pp : {PP_Doc} ]
 SEM CVal
