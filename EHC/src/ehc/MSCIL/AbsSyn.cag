@@ -6,81 +6,165 @@
 %%[(8 core) hs import (Data.Bits)
 %%]
 %%[(8 core) ag
-DATA Identifier
-	| Simple
-		name : {String}
-	| Dot
-		parent : Identifier
-		child : Identifier
-	| DoubleDot
-		parent : Identifier
-		child : Identifier
+DATA Id
+	| Id
+		value : {String}
+TYPE DottedName = [Id]
+TYPE DottedNameL = [DottedName]
 
-DATA Assembly
+DATA Decl
 	| Assembly
-		imports : ExternAssemblyL
-		name : String
-		hashAlgorithm : {Word}
-		version : {[Int]}
-		classes : ClassL
-		methods : MethodL
+		name : DottedName
+		info : AsmDeclL
+	| AssemblyExtern
+		name : DottedName
+		info : AsmRefDeclL
+	| Class
+		header : ClassHeader
+		members : ClassMemberL
+	| Field
+		decl : FieldDecl
+	| Method
+		header : MethodHeader
+		body : MethodBodyItemL
+TYPE DeclL = [Decl]
 
-DATA ExternAssembly
-	| Assembly
-		name : {String}
-		version : {[Int]}
-		publickeytoken : {[Int]}
-TYPE ExternAssemblyL = [ExternAssembly]
+DATA AsmDecl
+	| Ver
+		a : {Int}
+		b : {Int}
+		c : {Int}
+		d : {Int}
+	| HashAlgorithm
+		algo : {Int}
+TYPE AsmDeclL = [AsmDecl]
+		
+DATA AsmRefDecl
+	| Ver
+		a : {Int}
+		b : {Int}
+		c : {Int}
+		d : {Int}
+	| PubKeyToken
+		token : {[Int]}
+TYPE AsmRefDeclL = [AsmRefDecl]
+
+DATA ClassHeader
+	| ClassHeader
+		attrs : ClassAttrL
+		name : Id
+		extends : TypeSpecL
+
+DATA ClassAttr
+	| Abstract
+	| Ansi
+	| Auto
+	| Explicit
+	| Interface
+	| Private
+	| Public
+TYPE ClassAttrL = [ClassAttr]
+
+DATA ClassMember
+	| Class
+		header : ClassHeader
+		members : ClassMemberL
+	| Field
+		decl : FieldDecl
+	| Method
+		header : MethodHeader
+		body : MethodBodyItemL
+TYPE ClassMemberL = [ClassMember]
+
+DATA FieldDecl
+	| FieldDecl
+		byteOffset : {Maybe Int}
+		attrs : FieldAttrL
+		ty : Type
+		name : Id
+
+DATA FieldAttr
+	| Family
+	| Private
+	| Public
+	| RtSpecialName
+	| SpecialName
+	| Static
+TYPE FieldAttrL = [FieldAttr]
 
 DATA Type
-	| Void
+	| Bool
+	| Char
+	| Class
+		ref : TypeReference
 	| Object
 	| String
-	| Class
-		name : Identifier
+	| Void
 
-DATA Variable
-	| Variable
-		type : Type
-		name : MbVarName
-TYPE MbVarName = MAYBE Identifier
-TYPE VariableL = [Variable]
+DATA TypeSpec
+	| External
+		module : DottedName
+	| Ref
+		ref : TypeReference
+	| Type
+		ty : Type
+TYPE TypeSpecL = [TypeSpec]
+TYPE MbTypeSpec = MAYBE TypeSpec
 
-DATA Method
-	| Method
-		modifiers : {[String]}
-		returnType : Type
-		name : Identifier
-		arguments : VariableL
-		instructions : InstructionL
-TYPE MethodL = [Method]
+DATA TypeReference
+	| Ref
+		scope : MbResolutionScope
+		name : DottedNameL
 
-DATA Class
-	| Class
-		modifiers : {[String]}
-		name : Identifier
-		extends : MbExtends
-		fields : FieldL
-		methods : MethodL
-TYPE ClassL = [Class]
-TYPE MbExtends = MAYBE Identifier
+DATA ResolutionScope
+	| Module
+		fname : {String}
+	| AssemblyRefName
+		name : AssemblyRefName
+TYPE MbResolutionScope = MAYBE ResolutionScope
+DATA AssemblyRefName
+	| AssemblyRefName
+		name : DottedName
 
-DATA Field
-	| Field
-		modifiers : {[String]}
-		var : Variable
-TYPE FieldL = [Field]
+DATA MethodHeader
+	| MethodHeader
+		attr : MethAttrL
+		conv : MbCallConv
+		ty : Type
+		name : MethodName
+		params : ParamL
+
+DATA MethodName
+	| Cctor
+	| Ctor
+	| Name
+		name : DottedName
+DATA Param
+	| Param
+		attrs : ParamAttrL
+		ty : Type
+		id : Id
+TYPE ParamL = [Param]
+DATA ParamAttr
+	| In
+	| Opt
+	| Out
+TYPE ParamAttrL = [ParamAttr]
+
+DATA MethodBodyItem
+	| EntryPoint
+	| Locals
+		init : {Bool}
+		locals : LocalL
+	| MaxStack
+		size : {Int}
+	| Instr
+		instr : Instruction
+	| Label
+		id : Id
+TYPE MethodBodyItemL = [MethodBodyItem]
 
 DATA Instruction
-	| PseudoEntryPoint
-	| PseudoMaxStack
-		size : {Int}
-	| PseudoLocals
-		locals : VariableL
-	| Label
-		label : {String}
-	| Comment
-		data : {String}
 	| Ret
 	| LdArg
 		index : {Int}
@@ -94,38 +178,105 @@ DATA Instruction
 	| StLoc
 		index : {Int}
 	| LdFld
-		var : Variable
+		ty : Type
+		cls : TypeSpec
+		id : Id
 	| StFld
-		var : Variable
+		ty : Type
+		cls : TypeSpec
+		id : Id
 	| Tail
 	| CallVirt
-		modifiers : {[String]}
-		return : Type
-		name : Identifier
-		arguments : VariableL
+		conv : CallConv
+		ret : Type
+		cls : MbTypeSpec
+		name : MethodName
+		params : ParamL
 	| Call
-		modifiers : {[String]}
-		return : Type
-		name : Identifier
-		arguments : VariableL
+		conv : CallConv
+		ret : Type
+		cls : MbTypeSpec
+		name : MethodName
+		params : ParamL
 	| NewObj
-		modifiers : {[String]}
-		return : Type
-		name : Identifier
-		arguments : VariableL
+		conv : CallConv
+		ret : Type
+		cls : MbTypeSpec
+		name : MethodName
+		params : ParamL
 	| Box
-		name : Identifier
+		cls : TypeSpec
 	| IsInst
-		class : Identifier
+		cls : TypeSpec
 	| Pop
 	| BrFalse
-		label : {String}
+		label : Id
 	| BrTrue
-		label : {String}
+		label : Id
+
+DATA CallConv
+	| CallConv
+		instance : {Bool}
+		explicit : {Bool}
+		kind : CallKind
+TYPE MbCallConv = MAYBE CallConv
+
+DATA CallKind
+	| Default
+
+DATA Local
+	| Local
+		ty : Type
+		id : MbId
+TYPE MbId = MAYBE Id
+TYPE LocalL = [Local]
+
+DATA MethAttr
+	| Abstract
+	| Family
+	| NewSlot
+	| Private
+	| Public
+	| RtSpecialName
+	| SpecialName
+	| Static
+	| Virtual
+TYPE MethAttrL = [MethAttr]
+		
+--- Old
+{-
+DATA Variable
+	| Variable
+		type : Type
+		name : MbVarName
+TYPE MbVarName = MAYBE Id
+TYPE VariableL = [Variable]
+
+DATA Method
+	| Method
+		modifiers : {[String]}
+		returnType : Type
+		name : Id
+		arguments : VariableL
+		instructions : InstructionL
+TYPE MethodL = [Method]
+
+DATA Class
+	| Class
+		modifiers : {[String]}
+		name : Id
+		extends : MbExtends
+		fields : FieldL
+		methods : MethodL
+TYPE ClassL = [Class]
+TYPE MbExtends = MAYBE Id
+
+DATA Field
+	| Field
+		modifiers : {[String]}
+		var : Variable
+TYPE FieldL = [Field]
+
 TYPE InstructionL = [Instruction]
+-}
 %%]
-		
-	
-		
-		
-		

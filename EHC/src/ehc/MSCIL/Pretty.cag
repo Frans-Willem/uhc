@@ -18,41 +18,259 @@ WRAPPER
 %%]
 
 %%[(8 core) hs export(ppAssembly)
-ppAssembly :: Assembly -> PP_Doc
-ppAssembly chunk
-  = pp_Syn_Assembly t
-  where t = wrap_Assembly (sem_Assembly chunk)
-              (Inh_Assembly {})
+ppDeclL :: ppDeclL -> PP_Doc
+ppDeclL l
+  = pp_Syn_DeclL t
+  where t = wrap_DeclL (sem_DeclL chunk)
+              (Inh_DeclL {})
 %%]
 
 %%[(8 core) ag
-ATTR Identifier [ | | pp : {PP_Doc} ]
-SEM Identifier
-  | Simple lhs.pp = text @name
-  | Dot lhs.pp = @parent.pp >|< text "." >|< @child.pp
-  | DoubleDot lhs.pp = @parent.pp >|< text "::" >|< @child.pp
+ATTR Id [ | | pp : {PP_Doc} ]
+SEM Id
+  | Id lhs.pp = text "'" >|< text @value >|< text "'"
 
-ATTR Assembly [ | | pp : {PP_Doc} ]
-SEM Assembly
-  | Assembly lhs.pp =
-      @imports.pp >-<
-      ".assembly" >#< @name >-<
-      text "{" >-< indent 2 (
-        text ".hash algorithm 0x" >|< (showHex @hashAlgorithm "") >-<
-        text ".ver" >#< (ppListSep "" "" ":" $ map (text . show) @version)
-      ) >-< text "}" >-<
-      @classes.pp >-<
-      @methods.pp
+ATTR DottedName [ | | pp : {PP_Doc} isNil : {Bool} ]
+SEM DottedName
+  | Nil lhs.isNil = True
+  | Cons lhs.isNil = False
+  | Nil lhs.pp = empty
+  | Cons lhs.pp =
+      case @tl.isNil
+        True -> @hd.pp
+        False -> @hd.pp >|< text "." >|< @tl.pp
 
-ATTR ExternAssembly ExternAssemblyL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
-SEM ExternAssembly
+ATTR DottedNameL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
+
+ATTR Decl [ | | pp : {PP_Doc} ]
+SEM Decl
   | Assembly lhs.pp =
-      text ".assembly extern" >#< @name >-<
-      text "{" >-< indent 2 (
-        text ".ver" >#< (ppListSep "" "" ":" $ map (text . show) @version) >-<
-        text ".publickeytoken =" >#< (ppListSep "(" ")" " " $ map (\x -> text $ showHex x "") @publickeytoken)
-      ) >-<
-      text "}" 
+      (text ".assembly" >#< @name.pp) >-<
+      text "{" >-<
+      indent 2 @info.pp >-<
+      text "}"
+  | AssemblyExtern lhs.pp =
+      (text ".assembly extern" >#< @name.pp) >-<
+      text "{" >-<
+      indent 2 @info.pp >-<
+      text "}"
+  | Class lhs.pp =
+      (text ".class" >#< @header.pp) >-<
+      text "{" >-<
+      indent 2 @members.pp >-<
+      text "}"
+  | Field lhs.pp =
+      text ".field" >#< @decl.pp
+  | Method lhs.pp =
+      (text ".method" >#< @header.pp) >-<
+      text "{" >-<
+      indent 2 @body.pp >-<
+      text "}"
+ATTR DeclL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
+
+ATTR AsmDecl [ | | pp : {PP_Doc} ]
+SEM AsmDecl
+  | Ver lhs.pp = text ".ver" >#< (ppListSep "" "" ":" $ map (text . show) [@a,@b,@c,@d])
+  | HashAlgorithm lhs.pp = text ".hash algorithm 0x" >|< (showHex @algo "")
+ATTR AsmDeclL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
+
+ATTR AsmRefDecl [ | | pp : {PP_Doc} ]
+SEM AsmRefDecl
+  | Ver lhs.pp = text ".ver" >#< (ppListSep "" "" ":" $ map (text . show) [@a,@b,@c,@d])
+  | PubKeyToken lhs.pp = text ".publickeytoken =" >#< (ppListSep "(" ")" " " $ map (\x -> text $ showHex x "") @token)
+ATTR AsmRefDeclL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
+
+ATTR ClassHeader [ | | pp : {PP_Doc} ]
+SEM ClassHeader
+  | ClassHeader lhs.pp =
+      foldl
+        (>#<)
+        (foldr
+          (>|<)
+          @name.pp
+          (zipWith (>#<) ((text " extends"):(text " implements"):(repeat $ text ",") @attrs.pp)
+        )
+        (zipWith (>#<)
+
+ATTR ClassAttr [ | | pp : {PP_Doc} ]
+ATTR ClassAttrL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
+SEM ClassAttr
+  | Abstract lhs.pp = text "abstract"
+  | Ansi lhs.pp = text "ansi"
+  | Auto lhs.pp = text "auto"
+  | Explicit lhs.pp = text "explicit"
+  | Interface lhs.pp = text "interface"
+  | Private lhs.pp = text "private"
+  | Public lhs.pp = text "public"
+
+ATTR ClassMember [ | | pp : {PP_Doc} ]
+ATTR ClassMemberL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
+SEM ClassMember
+  | Class lhs.pp =
+      (text ".class" >#< @header.pp) >-<
+      text "{" >-<
+      indent 2 @members.pp >-<
+      text "}"
+  | Field lhs.pp =
+      text ".field" >#< @decl.pp
+  | Method lhs.pp =
+      (text ".method" >#< @header.pp) >-<
+      text "{" >-<
+      indent 2 @body.pp >-<
+      text "}"
+
+ATTR FieldDecl [ | | pp : {PP_Doc} ]
+SEM FieldDecl
+  | FieldDecl lhs.pp =
+      (case @byteOffset of
+        Nothing -> empty
+        Just x -> text "[" >|< (text $ show x) >|< text "] "
+      )
+      >|<
+      foldr (>#<) (@ty.pp >#< @name.pp) @attrs.pp
+
+ATTR FieldAttr [ | | pp : {PP_Doc} ]
+ATTR FieldAttrL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
+SEM FieldAttr
+  | Family lhs.pp = text "family"
+  | Private lhs.pp = text "private"
+  | Public lhs.pp = text "public"
+  | RtSpecialName lhs.pp = text "rtspecialname"
+  | SpecialName lhs.pp = text "specialname"
+  | Static lhs.pp = text "static"
+
+ATTR Type [ | | pp : {PP_Doc} ]
+SEM Type
+  | Bool lhs.pp = text "bool"
+  | Char lhs.pp = text "char"
+  | Class lhs.pp = text "class" >#< @ref.pp
+  | Object lhs.pp = text "object"
+  | String lhs.pp = text "string"
+  | Void lhs.pp = text "void"
+
+ATTR TypeSpec [ | | pp : {PP_Doc} ]
+ATTR TypeSpecL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
+SEM TypeSpec
+  | External lhs.pp = ppBrackets @module.pp
+  | Ref lhs.pp = @ref.pp
+  | Type lhs.pp = @ty.pp
+
+ATTR MbTypeSpec MbCallConv MbId MbResolutionScope [ | | pp : {Maybe PP_Doc} ]
+SEM MbTypeSpec MbCallConv MbId MbResolutionScope
+  | Just lhs.pp = Just @just.pp
+  | Nothing lhs.pp = Nothing
+
+ATTR TypeReference [ | | pp : {PP_Doc} ]
+SEM TypeReference
+  | Ref loc.prefixScope = maybe id (>#<) @scope.pp
+  | Ref lhs.pp = @loc.prefixScope $ ppListSep "" "" "/" @name.pp
+
+ATTR ResolutionScope [ | | pp : {PP_Doc} ]
+SEM ResolutionScope
+  | Module lhs.pp = text "[.module" >#< text @fname >#< text "]"
+  | AssemblyRefName lhs.pp = ppBrackets @name.pp
+
+ATTR AssemblyRefName [ | | pp : {PP_Doc} ]
+
+ATTR MethodHeader [ | | pp : {PP_Doc} ]
+SEM MethodHeader
+  | MethodHeader loc.prefixConv = maybe id (>#<) @conv.pp
+  | MethodHeader lhs.pp =
+      foldr
+        (>#<)
+        (
+          @loc.prefixConv $
+            @ty.pp >#< @name.pp >|<
+            ppParensCommas' @params.pp
+        )
+        @attr.pp
+
+ATTR MethodName [ | | pp : {PP_Doc} ]
+SEM MethodName
+  | Cctor lhs.pp = text ".cctor"
+  | Ctor lhs.pp = text ".ctor"
+  | Name lhs.pp = @name.pp
+
+ATTR Param [ | | pp : {PP_Doc} ]
+ATTR ParamL [ | | pp USE {:} {[]} : {[PP_Doc]} ] 
+SEM Param
+  | Param lhs.pp = 
+      foldr (>#<)
+      (
+        @ty.pp >#< id.pp
+      ) 
+      @attrs.pp
+
+ATTR ParamAttr [ | | pp : {PP_Doc} ]
+ATTR ParamAttrL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
+SEM ParamAttr
+  | In lhs.pp = text "in"
+  | Opt lhs.pp = text "opt"
+  | Out lhs.pp = text "out"
+
+ATTR MethodBodyItem [ | | pp : {PP_Doc} ]
+ATTR MethodBodyItemL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
+SEM MethodBodyItem
+  | EntryPoint lhs.pp = text ".entrypoint"
+  | Locals lhs.pp = text (if @init then ".locals init" else ".locals") >#< ppParensComma' @locals.pp
+  | MaxStack lhs.pp = text ".maxstack" >#< (text $ show @size)
+  | Instr lhs.pp = @instr.pp
+  | Label lhs.pp = @id.pp >|< ":"
+
+ATTR Instruction [ | | pp : {PP_Doc} ]
+SEM Instruction
+  | Ret lhs.pp = text "ret"
+  | LdArg lhs.pp = text "ldarg" >#< (text $ show @index)
+  | LdStr lhs.pp = text "ldstr" >#< (text $ show @value)
+  | LdcI4 lhs.pp = text "ldci4" >#< (text $ show @value)
+  | LdNull lhs.pp = text "ldnull"
+  | LdLoc lhs.pp = text "ldloc" >#< (text $ show @index)
+  | StLoc lhs.pp = text "stloc" >#< (text $ show @index)
+  | LdFld lhs.pp = text "ldfld" >#< @ty.pp >#< @cls.pp >|< text "::" >|< @id.pp
+  | StFld lhs.pp = text "stfld" >#< @ty.pp >#< @cls.pp >|< text "::" >|< @id.pp
+  | Tail lhs.pp = text "tail."
+  | CallVirt Call NewObj loc.prefixcls = maybe id (\x y -> x >|< text "::" >|< y) @cls.pp
+  | CallVirt lhs.pp = text "callvirt" >#< @conv.pp >#< @ret.pp >#< @loc.prefixcls @name.pp >|< ppParensCommas' @params.pp
+  | Call lhs.pp = text "call" >#< @conv.pp >#< @ret.pp >#< @loc.prefixcls @name.pp >|< ppParensCommas' @params.pp
+  | NewObj lhs.pp = text "newobj" >#< @conv.pp >#< @ret.pp >#< @loc.prefixcls @name.pp >|< ppParensCommas' @params.pp
+  | Box lhs.pp = text "box" >#< @cls.pp
+  | IsInst lhs.pp = text "isinst" >#< @cls.pp
+  | Pop lhs.pp = text "pop"
+  | BrFalse lhs.pp = text "brfalse" >#< @label.pp
+  | BrTrue lhs.pp = text "brtrue" >#< @label.pp
+
+ATTR CallConv [ | | pp : {PP_Doc} ]
+SEM CallConv
+  | CallConv lhs.pp = (if @instance then text "instance " else empty) >|< (if @explicit then text "explicit " else empty) >|< @kind.pp
+
+ATTR CallKind [ | | pp : {PP_Doc} ]
+SEM CallKind
+  | Default lhs.pp = text "default"
+
+ATTR Local [ | | pp : {PP_Doc} ]
+SEM Local
+  | Local lhs.pp =
+      case @id of
+        Nothing -> @ty.pp
+        Just x -> @ty.pp >#< x
+ATTR LocalL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
+
+ATTR MethAttr [ | | pp : {PP_Doc} ]
+ATTR MethAttrL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
+SEM MethAttr
+  | Abstract lhs.pp = text "abstract"
+  | Family lhs.pp = text "family"
+  | NewSlot lhs.pp = text "newslot"
+  | Private lhs.pp = text "private"
+  | Public lhs.pp = text "public"
+  | RtSpecialName lhs.pp = text "rtspecialname"
+  | SpecialName lhs.pp = text "specialname"
+  | Static lhs.pp = text "static"
+  | Virtual lhs.pp = text "virtual"
+
+
+{- OLD OLD OLD -}
+{-
 
 ATTR Type [ | | pp : {PP_Doc} ]
 SEM Type
@@ -75,11 +293,6 @@ SEM VariableL
 SEM Variable
   | Variable lhs.pp = @type.pp >|< @name.pp
 
-ATTR MbVarName [ | | pp : {PP_Doc} ]
-SEM MbVarName
-  | Nothing lhs.pp = empty 
-  | Just lhs.pp = text " " >|< @just.pp
-
 ATTR Method MethodL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
 SEM Method
   | Method lhs.pp =
@@ -99,15 +312,15 @@ SEM Class
       text "{" >-<
         indent 2 (@fields.pp >-< @methods.pp) >-<
       text "}"
-ATTR MbExtends [ | | pp : {PP_Doc} ]
-SEM MbExtends
-  | Nothing lhs.pp = empty
-  | Just lhs.pp = text " extends" >#< @just.pp
 
 ATTR Field FieldL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
 SEM Field
   | Field lhs.pp = 
       text ".field" >#< (ppSpaces $ map text @modifiers) >#< @var.pp
+
+ATTR FieldDecl [ | | pp : {PP_Doc} ]
+SEM FieldDecl
+  | FieldDecl lhs.pp = TODO
 
 ATTR InstructionL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
 ATTR Instruction [ | | pp : {PP_Doc} ]
@@ -138,4 +351,5 @@ SEM Instruction
   | Pop lhs.pp = text "pop"
   | BrFalse lhs.pp = text "brfalse" >#< (text @label)
   | BrTrue lhs.pp = text "brtrue" >#< (text @label)
+-}
 %%]
