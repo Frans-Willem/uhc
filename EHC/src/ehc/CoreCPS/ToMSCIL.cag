@@ -267,7 +267,7 @@ SEM CTm
   | LetVal lhs.localoffset = @lhs.localoffset + 1
   | LetVal lhs.locals = (environmentVariable @loc.valname) : @body.locals
   | LetVal bindvalue.name = @bindname
-ATTR CVal [ name : {ValueName} maxstack : {Int} | | instr : {MSCIL.InstructionL} ]
+ATTR CVal [ name : {ValueName} | | instr : {MSCIL.InstructionL} maxstack : {Int} ]
 ATTR CVal [ | | classes USE {++} {[]} : {MSCIL.ClassL} ]
 ATTR CVal [ env : {Environment} | | ]
 SEM CVal
@@ -467,7 +467,24 @@ SEM CThunkBind
                 [ MSCIL.Instruction_Ret ]
               )
           , MSCIL.Method_Method
-              ["family","virtual","instance"]
+              ["public", "family","instance"]
+              MSCIL.Type_Void
+              (MSCIL.Identifier_Simple "Fixup")
+              (map environmentVariable @loc.recupvalues)
+              (
+                (concat $ map
+                  (\(upval, index) -> 
+                    [ MSCIL.Instruction_LdArg 0
+                    , MSCIL.Instruction_LdArg index
+                    , MSCIL.Instruction_StFld (environmentMember @loc.classname upval)
+                    ]
+                  )
+                  (zip @loc.recupvalues [1..])
+                ) ++
+                [ MSCIL.Instruction_Ret ]
+              )
+          , MSCIL.Method_Method
+              ["public", "family","virtual","instance"]
               MSCIL.Type_Void
               (MSCIL.Identifier_Simple "Eval")
               [MSCIL.Variable_Variable (MSCIL.Type_Class continuationBase) $ Just (environmentIdentifier @loc.contenv )]
@@ -483,7 +500,7 @@ SEM CThunkBind
       [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) (map environmentVariable @loc.nonrecupvalues)
       , MSCIL.Instruction_StLoc @lhs.localoffset
       ]
-  | ThunkBind lhs.allocmaxstack = foldr max ((length @loc.upvalues) + 1) (zipWith (+) @loc.nonrecupvalmaxstack [0..])
+  | ThunkBind lhs.allocmaxstack = foldr max ((length @loc.nonrecupvalues) + 1) (zipWith (+) @loc.nonrecupvalmaxstack [0..])
   | ThunkBind body.localoffset = 0
   | ThunkBind body.env =
       Map.fromList $
@@ -493,7 +510,12 @@ SEM CThunkBind
 
 ATTR CThunkBind CThunkBindL [ | | fixupinstr USE {++} {[]} : {MSCIL.InstructionL} fixupmaxstack USE {max} {0} : {Int} ]
 SEM CThunkBind
-  | ThunkBind lhs.fixupinstr = map (\_ -> error "TODO: Pass recursive upvalues") @loc.recupvalues
+  | ThunkBind (loc.recupvalinstr, loc.recupvalmaxstack) = unzip $ map (readEnv @lhs.recenv) @loc.recupvalues
+  | ThunkBind lhs.fixupinstr = 
+      [ MSCIL.Instruction_LdLoc @lhs.localoffset ] ++
+      (concat @loc.recupvalinstr) ++
+      [ MSCIL.Instruction_Call ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple "Fixup")) (map environmentVariable @loc.recupvalues) ]
+  | ThunkBind lhs.fixupmaxstack = foldl max ((length @loc.recupvalues) + 1) (zipWith (+) @loc.recupvalmaxstack [1..])
 
 ----
 -- ContAppl
