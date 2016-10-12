@@ -344,7 +344,7 @@ SEM CPat
         @lhs.cpsContent
   | * - Var lhs.cpsTrans = @lhs.cpsContent
 
-ATTR CPatRest [ | | cpsTrans : {CPS.CCasePatternRest} ]
+ATTR CPatRest [ | | cpsTrans : {Maybe CPS.ThunkName} ]
 SEM CPatRest
   | Var lhs.cpsTrans = Just (createThunkName @nm)
   | Empty lhs.cpsTrans = Nothing

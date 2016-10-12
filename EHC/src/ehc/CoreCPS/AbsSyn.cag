@@ -25,10 +25,9 @@ DATA CCasePattern
   | Default
   | Tag
       tag : {CTag}
-      rest : CCasePatternRest
+      rest : {Maybe ThunkName}
       args : {[ThunkName]}
   | Int value : {Int}
-TYPE CCasePatternRest = MAYBE ThunkName
 
 DATA CCaseBranch
   | CaseBranch

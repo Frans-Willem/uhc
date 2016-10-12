@@ -73,7 +73,12 @@ ATTR CCaseBranchL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
 ATTR CCasePattern [ | | pp : {PP_Doc} ]
 SEM CCasePattern
   | Default lhs.pp = text "default"
-  | Tag lhs.pp = text "#Tag" >#< (ppSpaces ((pp @tag) : map pp @args))
+  | Tag lhs.pp =
+      case @rest of
+        Nothing -> @loc.tagpp
+        Just x -> (pp x) >#< text "@" >#< @loc.tagpp
+  | Tag loc.tagpp =
+      text "#Tag" >#< (ppSpaces ((pp @tag) : map pp @args))
   | Int lhs.pp = text $ show @value
 ATTR CCaseBranch [ | | pp : {PP_Doc} ]
 SEM CCaseBranch
