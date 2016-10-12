@@ -77,6 +77,8 @@ DATA Instruction
 		size : {Int}
 	| PseudoLocals
 		locals : VariableL
+	| Label
+		label : {String}
 	| Comment
 		data : {String}
 	| Ret
@@ -113,6 +115,13 @@ DATA Instruction
 		arguments : VariableL
 	| Box
 		name : Identifier
+	| IsInst
+		class : Identifier
+	| Pop
+	| BrFalse
+		label : {String}
+	| BrTrue
+		label : {String}
 TYPE InstructionL = [Instruction]
 %%]
 		

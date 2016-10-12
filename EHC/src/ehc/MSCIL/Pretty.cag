@@ -115,6 +115,7 @@ SEM Instruction
   | PseudoEntryPoint lhs.pp = text ".entrypoint"
   | PseudoMaxStack lhs.pp = text ".maxstack" >#< (text $ show @size)
   | PseudoLocals lhs.pp = ".locals init" >#< ppParens @locals.pp
+  | Label lhs.pp = (text @label) >|< text ":"
   | Comment lhs.pp = text "//" >#< text @data
   | Ret lhs.pp = text "ret"
   | LdArg lhs.pp = text "ldarg" >#< show @index
@@ -133,4 +134,8 @@ SEM Instruction
   | Call lhs.pp = text "call" >#< (ppSpaces $ map text @modifiers) >#< @return.pp >#< @name.pp >|< ppParens @arguments.pp
   | NewObj lhs.pp = text "newobj" >#< (ppSpaces $ map text @modifiers) >#< @return.pp >#< @name.pp >|< ppParens @arguments.pp
   | Box lhs.pp = text "box" >#< @name.pp
+  | IsInst lhs.pp = text "isinst" >#< @class.pp
+  | Pop lhs.pp = text "pop"
+  | BrFalse lhs.pp = text "brfalse" >#< (text @label)
+  | BrTrue lhs.pp = text "brtrue" >#< (text @label)
 %%]
