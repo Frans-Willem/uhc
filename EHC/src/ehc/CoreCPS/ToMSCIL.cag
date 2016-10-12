@@ -41,7 +41,7 @@ cps2cil tm
       ]
   where
     t = wrap_CTm (sem_CTm tm) (inh)
-    inh = Inh_CTm {env_Inh_CTm = Map.empty, localoffset_Inh_CTm = 0}
+    inh = Inh_CTm {env_Inh_CTm = Map.empty, localoffset_Inh_CTm = 0, caseNumber_Inh_CTm = 0}
 
 %%]
 
@@ -49,7 +49,7 @@ cps2cil tm
 data VarLoc
   = Local Int
   | Argument Int
-  | Field MSCIL.Variable
+  | Field VarLoc MSCIL.Variable
 
 data EnvironmentKey
   = EnvironmentValue HsName
@@ -77,13 +77,21 @@ type Environment = Map.Map EnvironmentKey VarLoc
 readVar :: VarLoc -> (MSCIL.InstructionL, Int)
 readVar (Local index) = ([MSCIL.Instruction_LdLoc index], 1)
 readVar (Argument index) = ([MSCIL.Instruction_LdArg index], 1)
-readVar (Field var) = ([MSCIL.Instruction_LdArg 0, MSCIL.Instruction_LdFld var], 1)
+readVar (Field owner var)
+  = (ownerinstr ++ [MSCIL.Instruction_LdFld var], max 1 ownermaxstack)
+  where
+    (ownerinstr, ownermaxstack) = readVar owner
 
 readEnv :: Environment -> EnvironmentKey -> (MSCIL.InstructionL, Int)
 readEnv env key
   = case (Map.lookup key env) of
       Just x -> readVar x
-      Nothing -> ([MSCIL.Instruction_LdNull, MSCIL.Instruction_Comment $ "Undefined variable: " ++ (show key)], 1)
+      Nothing -> readUndefinedVar key
+
+readUndefinedVar :: EnvironmentKey -> (MSCIL.InstructionL, Int)
+readUndefinedVar (EnvironmentValue name) = ((debugOutputInstrs ("ERROR: Undefined value " ++ (show name))) ++ [MSCIL.Instruction_Ret], 1)
+-- TODO: Instantiate thunk or continuation which will error when invoked.
+readUndefinedVar key = ([MSCIL.Instruction_LdNull, MSCIL.Instruction_Comment ("Undefined " ++ (show key))], 1)
 
 environmentType :: EnvironmentKey -> MSCIL.Type
 environmentType (EnvironmentValue _) = MSCIL.Type_Object
@@ -112,6 +120,9 @@ continuationClassName (ContName name) = MSCIL.Identifier_Simple $ "Continuation"
 
 thunkBase :: MSCIL.Identifier
 thunkBase = MSCIL.Identifier_Simple "BaseThunk"
+
+thunkWrapper :: MSCIL.Identifier
+thunkWrapper = MSCIL.Identifier_Simple "WrapperThunk"
 
 thunkClassName :: ThunkName -> MSCIL.Identifier
 thunkClassName (ThunkName name) = MSCIL.Identifier_Simple $ "Thunk" ++ (show name)
@@ -223,11 +234,17 @@ createTagClass tag arguments =
 createTagClasses :: (Set.Set (CTag, Int)) -> [MSCIL.Class]
 createTagClasses s
   = map (\(tag, args) -> createTagClass tag args) $ Set.toList s
+
+debugOutputInstrs :: String -> MSCIL.InstructionL
+debugOutputInstrs s =
+  [ MSCIL.Instruction_LdStr s
+  , MSCIL.Instruction_Call [] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot (MSCIL.Identifier_Dot (MSCIL.Identifier_Simple "class [corlib]System") (MSCIL.Identifier_Simple "Console")) (MSCIL.Identifier_Simple "WriteLine")) [MSCIL.Variable_Variable MSCIL.Type_Object Nothing]
+  ]
 %%]
 
 %%[(8 core) ag
 
-ATTR CTm CVal CThunkBind CThunkBindL [ | | tags USE {Set.union} {Set.empty} : {Set.Set (CTag,Int)} ]
+ATTR CTm CVal CThunkBind CThunkBindL CCaseBranch CCaseBranchL CCasePattern [ | | tags USE {Set.union} {Set.empty} : {Set.Set (CTag,Int)} ]
 SEM CVal
   | TagVal lhs.tags = Set.singleton (@tag,length @args)
 
@@ -307,7 +324,7 @@ SEM CVal
       Map.fromList $
         (@loc.contenv, Argument 1) :
         (@loc.thunkenv, Argument 2) :
-        (zip @loc.upvalues $ map (Field . (environmentMember @loc.classname)) @loc.upvalues)
+        (zip @loc.upvalues $ map ((Field (Argument 0)) . (environmentMember @loc.classname)) @loc.upvalues)
   | LamVal (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @lhs.env) @loc.upvalues
   | LamVal lhs.instr =
       (concat @loc.upvalueinstr) ++
@@ -375,7 +392,7 @@ SEM CTm
   | LetCont bindbody.env =
       Map.fromList $
         (@loc.valueenv, Argument 1) :
-        (zip @loc.upvalues $ map (Field . (environmentMember @loc.classname)) @loc.upvalues)
+        (zip @loc.upvalues $ map ((Field (Argument 0)) . (environmentMember @loc.classname)) @loc.upvalues)
   | LetCont lhs.classes = @loc.class : (@bindbody.classes ++ @body.classes)
   | LetCont (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @lhs.env) @loc.upvalues
   | LetCont lhs.instr =
@@ -471,7 +488,7 @@ SEM CThunkBind
       Map.fromList $
         (@loc.thunkenv, Argument 0) :
         (@loc.contenv, Argument 1) :
-        (zip @loc.allupvalues $ map (Field . (environmentMember @loc.classname)) @loc.allupvalues)
+        (zip @loc.allupvalues $ map ((Field (Argument 0)) . (environmentMember @loc.classname)) @loc.allupvalues)
 
 ATTR CThunkBind CThunkBindL [ | | fixupinstr USE {++} {[]} : {MSCIL.InstructionL} fixupmaxstack USE {max} {0} : {Int} ]
 SEM CThunkBind
@@ -554,7 +571,141 @@ SEM CTm
   | Exit lhs.maxstack = max 1 @loc.valmaxstack
   | Exit lhs.locals = []
 
+----
+-- Case
+----
+ATTR CTm CVal CCaseBranch CCaseBranchL CThunkBind CThunkBindL [ | caseNumber : {Int} | ]
+SEM CTm
+  | Case loc.valenv = valueName @val
+  | Case loc.currentNumber = @lhs.caseNumber
+  | Case lhs.caseNumber = @lhs.caseNumber + 1
+  | Case loc.classname = MSCIL.Identifier_Simple $ "CaseSwitch" ++ (show @loc.currentNumber)
+  | Case branches.index = 0
+  | Case lhs.locals = []
+--      if @branches.needlocal
+--        then [MSCIL.Variable_Variable MSCIL.Type_Object Nothing]
+--        else []
+  | Case branches.templocal = @lhs.localoffset
+  | Case lhs.classes =
+      (
+        MSCIL.Class_Class
+          ["public","auto","ansi"]
+          @loc.classname
+          Nothing
+          []
+          @branches.methods
+      )
+      : @branches.classes
+  | Case lhs.instr =
+      @branches.instr ++
+      ( if @branches.hasDefault
+          then []
+          else
+            (
+              (debugOutputInstrs $ "ERROR: Case fallthrough, none of the cases matched the value at case switch " ++ (show @loc.currentNumber)) ++
+              [ MSCIL.Instruction_Ret ]
+            )
+      ) ++
+      @branches.finalinstr
 
+ATTR CCaseBranch CCaseBranchL CCasePattern [ | | hasDefault USE {||} {False} : {Bool} ]
+SEM CCasePattern
+  | Default lhs.hasDefault = True
+
+ATTR CCaseBranch CCaseBranchL CCasePattern [ | | classes USE {++} {[]} : {MSCIL.ClassL} ]
+ATTR CCaseBranch CCaseBranchL [ valenv : {EnvironmentKey} | | ]
+ATTR CCaseBranch CCaseBranchL [ env : {Environment} | | ]
+ATTR CCaseBranch [ | | instr : {MSCIL.InstructionL} maxstack : {Int} ]
+ATTR CCaseBranch [ | | finalinstr : {MSCIL.InstructionL} ]
+ATTR CCaseBranchL [ | | instr USE {++} {[]} : {MSCIL.InstructionL} maxstack USE {max} {0} : {Int} ]
+ATTR CCaseBranchL [ | | finalinstr USE {++} {[]} : {MSCIL.InstructionL} ]
+ATTR CCaseBranch CCaseBranchL [ classname : {MSCIL.Identifier} index : {Int} | | ]
+SEM CCaseBranchL
+  | Cons tl.index = @lhs.index + 1
+SEM CCaseBranch
+  | CaseBranch loc.methodname = MSCIL.Identifier_Simple $ "branch" ++ (show @lhs.index)
+  | CaseBranch pat.method = MSCIL.Identifier_DoubleDot @lhs.classname @loc.methodname
+  | CaseBranch loc.upvalues = Set.toList @body.freevars
+  | CaseBranch pat.bodyupvalues = @loc.upvalues
+  | CaseBranch body.localoffset = 0
+  | CaseBranch body.env = Map.fromList $ zip @loc.upvalues (map Argument [0..])
+  | CaseBranch lhs.instr = @pat.instr
+  | CaseBranch lhs.finalinstr = @pat.finalinstr
+  | CaseBranch lhs.maxstack = @pat.maxstack
+
+ATTR CCaseBranch [ | | methods : {MSCIL.Method} ]
+ATTR CCaseBranchL [ | | methods USE {:} {[]} : {MSCIL.MethodL} ]
+SEM CCaseBranch
+  | CaseBranch lhs.methods =
+      MSCIL.Method_Method
+        ["public","static"]
+        MSCIL.Type_Void
+        @loc.methodname
+        (map environmentVariable @loc.upvalues)
+        (
+          [ MSCIL.Instruction_PseudoMaxStack @body.maxstack
+          , MSCIL.Instruction_PseudoLocals @body.locals
+          ] ++
+          @body.instr
+        )
+
+ATTR CCasePattern [ | | instr : {MSCIL.InstructionL} maxstack : {Int} ]
+ATTR CCasePattern [ | | finalinstr : {MSCIL.InstructionL} ]
+ATTR CCasePattern [ valenv : {EnvironmentKey} | | ]
+ATTR CCasePattern [ index : {Int} | | ]
+ATTR CCasePattern [ method : {MSCIL.Identifier} upvalues : {[EnvironmentKey]} | | ]
+ATTR CCasePattern [ env : {Environment} | | ]
+ATTR CCasePattern [ bodyupvalues : {[EnvironmentKey]} | | ]
+SEM CCasePattern
+  | Default (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @lhs.env) @lhs.bodyupvalues
+  | Default lhs.instr = 
+      (concat @loc.upvalueinstr) ++ 
+      [ MSCIL.Instruction_Tail
+      , MSCIL.Instruction_Call [] MSCIL.Type_Void @lhs.method (map environmentVariable @lhs.bodyupvalues)
+      , MSCIL.Instruction_Ret
+      ]
+  | Default lhs.finalinstr = []
+  | Default lhs.maxstack = foldl max (length @lhs.bodyupvalues) (zipWith (+) @loc.upvaluemaxstack [0..])
+  | Tag lhs.tags = Set.singleton (@tag, length @args)
+  | Tag (loc.valinstr, loc.valmaxstack) = readEnv @lhs.env @lhs.valenv
+  | Tag loc.classname = tagClassName @tag $ length @args
+  | Tag loc.label = "Branch" ++ (show @lhs.index)
+  | Tag loc.valloc = fromJust $ Map.lookup @lhs.valenv @lhs.env
+  | Tag loc.fieldnames = map thunkName @args
+  | Tag loc.fieldvars = map environmentVariable @loc.fieldnames
+  | Tag loc.fieldtypes = map environmentType @loc.fieldnames
+  | Tag loc.fieldlocs =
+      map
+        (\(index,t) ->
+          Field
+            @loc.valloc
+            ( MSCIL.Variable_Variable
+                t
+                (Just $ MSCIL.Identifier_DoubleDot @loc.classname (tagFieldName index))
+            )
+        )
+        (zip [1..] @loc.fieldtypes)
+  | Tag loc.fieldenv = Map.fromList $ zip @loc.fieldnames @loc.fieldlocs
+  | Tag loc.restenv =
+      case @rest of
+        Nothing -> Map.empty
+        Just restname -> Map.singleton (thunkName restname) @loc.valloc
+  | Tag loc.newenv = @loc.restenv `Map.union` @loc.fieldenv `Map.union` @lhs.env
+  | Tag (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @loc.newenv) @lhs.bodyupvalues
+  | Tag lhs.instr =
+      @loc.valinstr
+      ++
+      [ MSCIL.Instruction_IsInst (tagClassName @tag $ length @args)
+      , MSCIL.Instruction_BrTrue @loc.label
+      ]
+  | Tag lhs.finalinstr =
+      [ MSCIL.Instruction_Label @loc.label ] ++
+      (concat @loc.upvalueinstr) ++
+      [ MSCIL.Instruction_Tail
+      , MSCIL.Instruction_Call [] MSCIL.Type_Void @lhs.method (map environmentVariable @lhs.bodyupvalues)
+      , MSCIL.Instruction_Ret
+      ]
+  | Tag lhs.maxstack = foldl max (length @lhs.bodyupvalues) $ @loc.valmaxstack : (zipWith (+) @loc.upvaluemaxstack [0..])
 
 ----
 -- Free and bound variables
@@ -571,6 +722,8 @@ SEM CTm
   | ThunkEval lhs.freevars = Set.fromList [thunkName @thunk, contName @cont]
   | FuncAppl lhs.freevars = Set.fromList [valueName @func, contName @cont, thunkName @arg]
   | Exit lhs.freevars = Set.fromList [valueName @val]
+  | Case lhs.freevars = @branches.freevars
+
 SEM CVal
   | IntVal StringVal lhs.freevars = Set.empty
   | LamVal lhs.freevars = @body.freevars `Set.difference` (Set.fromList [contName @bindcont, thunkName @bindarg])
@@ -579,4 +732,22 @@ SEM CVal
 SEM CThunkBind
   | ThunkBind lhs.boundvars = Set.fromList [thunkName @thunkname]
   | ThunkBind lhs.freevars = Set.delete (contName @contname) @body.freevars
+
+ATTR CCasePattern [ | | boundvars : {Set.Set EnvironmentKey} ]
+SEM CCasePattern
+  | Default lhs.boundvars = Set.empty
+  | Tag loc.restboundvars =
+      case @rest of
+        Nothing -> Set.empty
+        Just x -> Set.singleton $ thunkName x
+  | Tag lhs.boundvars = @loc.restboundvars `Set.union` (Set.fromList $ map thunkName @args)
+  | Int lhs.boundvars = Set.empty
+
+ATTR CCaseBranch [ | | boundvars : {Set.Set EnvironmentKey} ]
+ATTR CCaseBranch [ | | freevars : {Set.Set EnvironmentKey} ]
+ATTR CCaseBranchL [ | | boundvars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} ]
+ATTR CCaseBranchL [ | | freevars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} ]
+SEM CCaseBranch
+  | CaseBranch loc.boundvars = @pat.boundvars
+  | CaseBranch lhs.freevars = @body.freevars `Set.difference` @pat.boundvars
 %%]
