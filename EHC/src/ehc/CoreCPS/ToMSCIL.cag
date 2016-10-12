@@ -46,35 +46,51 @@ cps2cil tm
 %%]
 
 %%[(8 core) hs
-data VarLoc
+data DataLocation
   = Local Int
   | Argument Int
-  | Field VarLoc MSCIL.Variable
+  | Field DataLocation MSCIL.Variable
 
 data EnvironmentKey
-  = EnvironmentValue HsName
-  | EnvironmentThunk HsName
-  | EnvironmentCont HsName
-  deriving (Eq, Ord)
+  = ValueKey ValueName
+  | ThunkKey ThunkName
+  | ContinuationKey ContName
+
+instance Eq EnvironmentKey where
+  (==) (ValueKey (ValueName a)) (ValueKey (ValueName b)) = a == b
+  (==) (ThunkKey (ThunkName a)) (ThunkKey (ThunkName b)) = a == b
+  (==) (ContinuationKey (ContName a)) (ContinuationKey (ContName b)) = a == b
+  (==) _ _ = False
+
+instance Ord EnvironmentKey where
+  compare (ValueKey (ValueName a)) (ValueKey (ValueName b)) = compare a b
+  compare (ThunkKey (ThunkName a)) (ThunkKey (ThunkName b)) = compare a b
+  compare (ContinuationKey (ContName a)) (ContinuationKey (ContName b)) = compare a b
+  compare (ValueKey _) _ = LT
+  compare (ThunkKey _) _ = GT
+  compare _ (ValueKey _) = GT
+  compare _ (ThunkKey _) = LT
+
+
+class ToEnvKey a where
+  asKey :: a -> EnvironmentKey
+
+instance ToEnvKey ValueName where
+  asKey = ValueKey
+instance ToEnvKey ThunkName where
+  asKey = ThunkKey
+instance ToEnvKey ContName where
+  asKey = ContinuationKey
 
 instance Show EnvironmentKey where
-  show (EnvironmentValue v) = "value " ++ show v
-  show (EnvironmentThunk v) = "thunk " ++ show v
-  show (EnvironmentCont v) = "continuation " ++ show v
+  show (ValueKey (ValueName nm)) = "value " ++ show nm
+  show (ThunkKey (ThunkName nm)) = "thunk " ++ show nm
+  show (ContinuationKey (ContName nm)) = "continuation " ++ show nm
 
-valueName :: ValueName -> EnvironmentKey
-valueName (ValueName v) = EnvironmentValue v
-
-thunkName :: ThunkName -> EnvironmentKey
-thunkName (ThunkName v) = EnvironmentThunk v
-
-contName :: ContName -> EnvironmentKey
-contName (ContName v) = EnvironmentCont v
-
-type Environment = Map.Map EnvironmentKey VarLoc
+type Environment = Map.Map EnvironmentKey DataLocation
 
 -- Gets current stacksize, puts variable on top of stack, and returns instructions and maximum stack size used.
-readVar :: VarLoc -> (MSCIL.InstructionL, Int)
+readVar :: DataLocation -> (MSCIL.InstructionL, Int)
 readVar (Local index) = ([MSCIL.Instruction_LdLoc index], 1)
 readVar (Argument index) = ([MSCIL.Instruction_LdArg index], 1)
 readVar (Field owner var)
@@ -89,28 +105,31 @@ readEnv env key
       Nothing -> readUndefinedVar key
 
 readUndefinedVar :: EnvironmentKey -> (MSCIL.InstructionL, Int)
-readUndefinedVar (EnvironmentValue name) = ((debugOutputInstrs ("ERROR: Undefined value " ++ (show name))) ++ [MSCIL.Instruction_Ret], 1)
+readUndefinedVar (ValueKey name) = ((debugOutputInstrs ("ERROR: Undefined value " ++ (show name))) ++ [MSCIL.Instruction_Ret], 1)
 -- TODO: Instantiate thunk or continuation which will error when invoked.
 readUndefinedVar key = ([MSCIL.Instruction_LdNull, MSCIL.Instruction_Comment ("Undefined " ++ (show key))], 1)
 
-environmentType :: EnvironmentKey -> MSCIL.Type
-environmentType (EnvironmentValue _) = MSCIL.Type_Object
-environmentType (EnvironmentThunk _) = MSCIL.Type_Class thunkBase
-environmentType (EnvironmentCont _) = MSCIL.Type_Class continuationBase
+keyToType :: EnvironmentKey -> MSCIL.Type
+keyToType (ValueKey _) = MSCIL.Type_Object
+keyToType (ThunkKey _) = MSCIL.Type_Class thunkBase
+keyToType (ContinuationKey _) = MSCIL.Type_Class continuationBase
 
-environmentIdentifier :: EnvironmentKey -> MSCIL.Identifier
-environmentIdentifier (EnvironmentValue n) = MSCIL.Identifier_Simple $ show n
-environmentIdentifier (EnvironmentThunk n) = MSCIL.Identifier_Simple $ show n
-environmentIdentifier (EnvironmentCont n) = MSCIL.Identifier_Simple $ show n
+keyToIdentifier :: EnvironmentKey -> MSCIL.Identifier
+keyToIdentifier (ValueKey (ValueName nm)) = MSCIL.Identifier_Simple $ show nm
+keyToIdentifier (ThunkKey (ThunkName nm)) = MSCIL.Identifier_Simple $ show nm
+keyToIdentifier (ContinuationKey (ContName nm)) = MSCIL.Identifier_Simple $ show nm
 
-environmentVariable :: EnvironmentKey -> MSCIL.Variable
-environmentVariable e = MSCIL.Variable_Variable (environmentType e) $ Just (environmentIdentifier e)
+keyToMemberId :: MSCIL.Identifier -> EnvironmentKey -> MSCIL.Identifier
+keyToMemberId p e = MSCIL.Identifier_DoubleDot p (keyToIdentifier e)
 
-environmentMember :: MSCIL.Identifier -> EnvironmentKey -> MSCIL.Variable
-environmentMember p e = MSCIL.Variable_Variable (environmentType e) $ Just (MSCIL.Identifier_DoubleDot p (environmentIdentifier e))
+keyToVariable :: EnvironmentKey -> MSCIL.Variable
+keyToVariable e = MSCIL.Variable_Variable (keyToType e) $ Just (keyToIdentifier e)
 
-environmentField :: EnvironmentKey -> MSCIL.Field
-environmentField v = MSCIL.Field_Field ["private"] (environmentVariable v)
+keyToMemberVar :: MSCIL.Identifier -> EnvironmentKey -> MSCIL.Variable
+keyToMemberVar p e = MSCIL.Variable_Variable (keyToType e) $ Just (keyToMemberId p e)
+
+keyToField :: EnvironmentKey -> MSCIL.Field
+keyToField v = MSCIL.Field_Field ["private"] (keyToVariable v)
 
 continuationBase :: MSCIL.Identifier
 continuationBase = MSCIL.Identifier_Simple "BaseContinuation"
@@ -200,6 +219,12 @@ tagClassName (CTag {ctagTyNm = tyNm, ctagNm = nm }) _ = MSCIL.Identifier_Simple 
 tagFieldName :: Int -> MSCIL.Identifier
 tagFieldName n = MSCIL.Identifier_Simple $ "field" ++ (show n)
 
+tagMemberFieldName :: CTag -> Int -> Int -> MSCIL.Identifier
+tagMemberFieldName t numargs n = MSCIL.Identifier_DoubleDot (tagClassName t numargs) (tagFieldName n)
+
+tagMemberVar :: CTag -> Int -> Int -> MSCIL.Variable
+tagMemberVar t numargs n = MSCIL.Variable_Variable (MSCIL.Type_Class thunkBase) (Just (tagMemberFieldName t numargs n))
+
 createTagClass :: CTag -> Int -> MSCIL.Class
 createTagClass tag arguments =
   MSCIL.Class_Class
@@ -229,7 +254,7 @@ createTagClass tag arguments =
     storeinstr (fieldname, index) =
       [ MSCIL.Instruction_LdArg 0
       , MSCIL.Instruction_LdArg index
-      , MSCIL.Instruction_StFld (MSCIL.Variable_Variable (MSCIL.Type_Class thunkBase) $ Just (MSCIL.Identifier_DoubleDot classname fieldname))
+      , MSCIL.Instruction_StFld (tagMemberVar tag arguments index)
       ]
 
 createTagClasses :: (Set.Set (CTag, Int)) -> [MSCIL.Class]
@@ -258,14 +283,14 @@ ATTR CTm [ | | maxstack USE {max} {0} : {Int} ]
 -- LetVal
 ----
 SEM CTm
-  | LetVal loc.valname = valueName @bindname
-  | LetVal body.env = Map.insert (valueName @bindname) (Local @lhs.localoffset) @lhs.env
+  | LetVal loc.valname = asKey @bindname
+  | LetVal body.env = Map.insert (asKey @bindname) (Local @lhs.localoffset) @lhs.env
   | LetVal lhs.instr =
       @bindvalue.instr ++
       [ MSCIL.Instruction_StLoc @lhs.localoffset ] ++
       @body.instr
   | LetVal lhs.localoffset = @lhs.localoffset + 1
-  | LetVal lhs.locals = (environmentVariable @loc.valname) : @body.locals
+  | LetVal lhs.locals = (keyToVariable @loc.valname) : @body.locals
   | LetVal bindvalue.name = @bindname
 ATTR CVal [ name : {ValueName} | | instr : {MSCIL.InstructionL} maxstack : {Int} ]
 ATTR CVal [ | | classes USE {++} {[]} : {MSCIL.ClassL} ]
@@ -278,20 +303,20 @@ SEM CVal
   | StringVal lhs.instr = [MSCIL.Instruction_LdStr @value]
   | IntVal StringVal lhs.maxstack = 1
   | LamVal loc.classname = functionClassName @lhs.name
-  | LamVal loc.contenv = contName @bindcont
-  | LamVal loc.thunkenv = thunkName @bindarg
+  | LamVal loc.contenv = asKey @bindcont
+  | LamVal loc.thunkenv = asKey @bindarg
   | LamVal loc.upvalues = Set.toList $ (@body.freevars `Set.difference` (Set.fromList [@loc.contenv, @loc.thunkenv]))
   | LamVal lhs.classes =
       [ MSCIL.Class_Class
           ["public","auto","ansi"]
           @loc.classname
           (Just functionBase)
-          (map environmentField @loc.upvalues)
+          (map keyToField @loc.upvalues)
           [ MSCIL.Method_Method
               ["public","specialname","rtspecialname","instance"]
               MSCIL.Type_Void
               (MSCIL.Identifier_Simple ".ctor")
-              (map environmentVariable @loc.upvalues)
+              (map keyToVariable @loc.upvalues)
               (
                 [  MSCIL.Instruction_LdArg 0
                 , MSCIL.Instruction_Call ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot functionBase (MSCIL.Identifier_Simple ".ctor")) []
@@ -300,7 +325,7 @@ SEM CVal
                     (\(upval, index) -> 
                       [ MSCIL.Instruction_LdArg 0
                       , MSCIL.Instruction_LdArg index
-                      , MSCIL.Instruction_StFld (environmentMember @loc.classname upval)
+                      , MSCIL.Instruction_StFld (keyToMemberVar @loc.classname upval)
                       ]
                     )
                     (zip @loc.upvalues [1..])
@@ -311,8 +336,8 @@ SEM CVal
               ["family","virtual","instance"]
               MSCIL.Type_Void
               (MSCIL.Identifier_Simple "Invoke")
-              [ MSCIL.Variable_Variable (MSCIL.Type_Class continuationBase) $ Just (environmentIdentifier @loc.contenv)
-              , MSCIL.Variable_Variable (MSCIL.Type_Class thunkBase) $ Just (environmentIdentifier @loc.thunkenv)
+              [ MSCIL.Variable_Variable (MSCIL.Type_Class continuationBase) $ Just (keyToIdentifier @loc.contenv)
+              , MSCIL.Variable_Variable (MSCIL.Type_Class thunkBase) $ Just (keyToIdentifier @loc.thunkenv)
               ]
               ( MSCIL.Instruction_PseudoMaxStack @body.maxstack
               : MSCIL.Instruction_PseudoLocals @body.locals
@@ -325,20 +350,20 @@ SEM CVal
       Map.fromList $
         (@loc.contenv, Argument 1) :
         (@loc.thunkenv, Argument 2) :
-        (zip @loc.upvalues $ map ((Field (Argument 0)) . (environmentMember @loc.classname)) @loc.upvalues)
+        (zip @loc.upvalues $ map ((Field (Argument 0)) . (keyToMemberVar @loc.classname)) @loc.upvalues)
   | LamVal (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @lhs.env) @loc.upvalues
   | LamVal lhs.instr =
       (concat @loc.upvalueinstr) ++
-      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) $ map environmentVariable @loc.upvalues
+      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) $ map keyToVariable @loc.upvalues
       ]
   | LamVal lhs.maxstack = foldr max (length @loc.upvalues) (zipWith (+) @loc.upvaluemaxstack [0..])
 SEM CVal
   | TagVal loc.classname = tagClassName @tag $ length @args
-  | TagVal loc.argenv = map thunkName @args
+  | TagVal loc.argenv = map asKey @args
   | TagVal (loc.arginstr, loc.argmaxstack) = unzip $ map (readEnv @lhs.env) @loc.argenv
   | TagVal lhs.instr =
       (concat @loc.arginstr) ++ 
-      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) $ map environmentVariable @loc.argenv
+      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) $ map keyToVariable @loc.argenv
       ]
   | TagVal lhs.maxstack = foldr max (length @args) (zipWith (+) @loc.argmaxstack [0..])
     
@@ -346,9 +371,9 @@ SEM CVal
 -- LetCont
 ----
 SEM CTm
-  | LetCont loc.contenv = contName @contname
-  | LetCont loc.valueenv = valueName @valname
-  | LetCont lhs.locals = (environmentVariable @loc.valueenv) : @body.locals
+  | LetCont loc.contenv = asKey @contname
+  | LetCont loc.valueenv = asKey @valname
+  | LetCont lhs.locals = (keyToVariable @loc.valueenv) : @body.locals
   | LetCont loc.target = @lhs.localoffset
   | LetCont lhs.localoffset = @lhs.localoffset + 1
   | LetCont loc.classname = continuationClassName @contname
@@ -358,12 +383,12 @@ SEM CTm
         ["public","auto","ansi"]
         @loc.classname
         (Just continuationBase)
-        (map environmentField @loc.upvalues)
+        (map keyToField @loc.upvalues)
         [ MSCIL.Method_Method
             ["public","specialname","rtspecialname","instance"]
             MSCIL.Type_Void
             (MSCIL.Identifier_Simple ".ctor")
-            (map environmentVariable @loc.upvalues)
+            (map keyToVariable @loc.upvalues)
             (
               [  MSCIL.Instruction_LdArg 0
               , MSCIL.Instruction_Call ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot continuationBase (MSCIL.Identifier_Simple ".ctor")) []
@@ -372,7 +397,7 @@ SEM CTm
                   (\(upval, index) -> 
                     [ MSCIL.Instruction_LdArg 0
                     , MSCIL.Instruction_LdArg index
-                    , MSCIL.Instruction_StFld (environmentMember @loc.classname upval)
+                    , MSCIL.Instruction_StFld (keyToMemberVar @loc.classname upval)
                     ]
                   )
                   (zip @loc.upvalues [1..])
@@ -383,7 +408,7 @@ SEM CTm
             ["family","virtual","instance"]
             MSCIL.Type_Void
             (MSCIL.Identifier_Simple "Invoke")
-            [MSCIL.Variable_Variable MSCIL.Type_Object $ Just (environmentIdentifier @loc.valueenv )]
+            [MSCIL.Variable_Variable MSCIL.Type_Object $ Just (keyToIdentifier @loc.valueenv )]
             ( MSCIL.Instruction_PseudoMaxStack @bindbody.maxstack
             : MSCIL.Instruction_PseudoLocals @bindbody.locals
             : @bindbody.instr
@@ -393,12 +418,12 @@ SEM CTm
   | LetCont bindbody.env =
       Map.fromList $
         (@loc.valueenv, Argument 1) :
-        (zip @loc.upvalues $ map ((Field (Argument 0)) . (environmentMember @loc.classname)) @loc.upvalues)
+        (zip @loc.upvalues $ map ((Field (Argument 0)) . (keyToMemberVar @loc.classname)) @loc.upvalues)
   | LetCont lhs.classes = @loc.class : (@bindbody.classes ++ @body.classes)
   | LetCont (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @lhs.env) @loc.upvalues
   | LetCont lhs.instr =
       (concat @loc.upvalueinstr) ++
-      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) (map environmentVariable @loc.upvalues)
+      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) (map keyToVariable @loc.upvalues)
       , MSCIL.Instruction_StLoc @loc.target
       ] ++
       @body.instr
@@ -409,7 +434,7 @@ SEM CTm
 -- LetThunk
 ----
 SEM CTm
-  | LetThunk lhs.locals = (map environmentVariable @binds.locals) ++ @body.locals
+  | LetThunk lhs.locals = (map keyToVariable @binds.locals) ++ @body.locals
   | LetThunk body.env = Map.union (Map.fromList $ zip @binds.locals $ map Local [@lhs.localoffset ..]) @lhs.env
   | LetThunk body.localoffset = @lhs.localoffset + (length @binds.locals)
   | LetThunk lhs.instr = @binds.allocinstr ++ @binds.fixupinstr ++ @body.instr
@@ -423,8 +448,8 @@ SEM CThunkBindL
   | Cons lhs.locals = @hd.local : @tl.locals
 SEM CThunkBind
   | ThunkBind loc.classname = thunkClassName @thunkname
-  | ThunkBind loc.thunkenv = thunkName @thunkname
-  | ThunkBind loc.contenv = contName @contname
+  | ThunkBind loc.thunkenv = asKey @thunkname
+  | ThunkBind loc.contenv = asKey @contname
   | ThunkBind lhs.local = @loc.thunkenv
   
 ATTR CThunkBind CThunkBindL [ localoffset : {Int} | | ]
@@ -445,12 +470,12 @@ SEM CThunkBind
           ["public","auto","ansi"]
           @loc.classname
           (Just thunkBase)
-          (map environmentField (@loc.nonrecupvalues ++ @loc.recupvalues))
+          (map keyToField (@loc.nonrecupvalues ++ @loc.recupvalues))
           [ MSCIL.Method_Method
               ["public","specialname","rtspecialname","instance"]
               MSCIL.Type_Void
               (MSCIL.Identifier_Simple ".ctor")
-              (map environmentVariable @loc.nonrecupvalues)
+              (map keyToVariable @loc.nonrecupvalues)
               (
                 [  MSCIL.Instruction_LdArg 0
                 , MSCIL.Instruction_Call ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot thunkBase (MSCIL.Identifier_Simple ".ctor")) []
@@ -459,7 +484,7 @@ SEM CThunkBind
                     (\(upval, index) -> 
                       [ MSCIL.Instruction_LdArg 0
                       , MSCIL.Instruction_LdArg index
-                      , MSCIL.Instruction_StFld (environmentMember @loc.classname upval)
+                      , MSCIL.Instruction_StFld (keyToMemberVar @loc.classname upval)
                       ]
                     )
                     (zip @loc.nonrecupvalues [1..])
@@ -470,13 +495,13 @@ SEM CThunkBind
               ["public", "family","instance"]
               MSCIL.Type_Void
               (MSCIL.Identifier_Simple "Fixup")
-              (map environmentVariable @loc.recupvalues)
+              (map keyToVariable @loc.recupvalues)
               (
                 (concat $ map
                   (\(upval, index) -> 
                     [ MSCIL.Instruction_LdArg 0
                     , MSCIL.Instruction_LdArg index
-                    , MSCIL.Instruction_StFld (environmentMember @loc.classname upval)
+                    , MSCIL.Instruction_StFld (keyToMemberVar @loc.classname upval)
                     ]
                   )
                   (zip @loc.recupvalues [1..])
@@ -487,7 +512,7 @@ SEM CThunkBind
               ["public", "family","virtual","instance"]
               MSCIL.Type_Void
               (MSCIL.Identifier_Simple "Eval")
-              [MSCIL.Variable_Variable (MSCIL.Type_Class continuationBase) $ Just (environmentIdentifier @loc.contenv )]
+              [MSCIL.Variable_Variable (MSCIL.Type_Class continuationBase) $ Just (keyToIdentifier @loc.contenv )]
               ( MSCIL.Instruction_PseudoMaxStack @body.maxstack
               : MSCIL.Instruction_PseudoLocals @body.locals
               : @body.instr
@@ -497,7 +522,7 @@ SEM CThunkBind
   | ThunkBind (loc.nonrecupvalinstr, loc.nonrecupvalmaxstack) = unzip $ map (readEnv @lhs.env) @loc.nonrecupvalues
   | ThunkBind lhs.allocinstr = 
       (concat @loc.nonrecupvalinstr) ++
-      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) (map environmentVariable @loc.nonrecupvalues)
+      [ MSCIL.Instruction_NewObj ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple ".ctor")) (map keyToVariable @loc.nonrecupvalues)
       , MSCIL.Instruction_StLoc @lhs.localoffset
       ]
   | ThunkBind lhs.allocmaxstack = foldr max ((length @loc.nonrecupvalues) + 1) (zipWith (+) @loc.nonrecupvalmaxstack [0..])
@@ -506,7 +531,7 @@ SEM CThunkBind
       Map.fromList $
         (@loc.thunkenv, Argument 0) :
         (@loc.contenv, Argument 1) :
-        (zip @loc.allupvalues $ map ((Field (Argument 0)) . (environmentMember @loc.classname)) @loc.allupvalues)
+        (zip @loc.allupvalues $ map ((Field (Argument 0)) . (keyToMemberVar @loc.classname)) @loc.allupvalues)
 
 ATTR CThunkBind CThunkBindL [ | | fixupinstr USE {++} {[]} : {MSCIL.InstructionL} fixupmaxstack USE {max} {0} : {Int} ]
 SEM CThunkBind
@@ -514,7 +539,7 @@ SEM CThunkBind
   | ThunkBind lhs.fixupinstr = 
       [ MSCIL.Instruction_LdLoc @lhs.localoffset ] ++
       (concat @loc.recupvalinstr) ++
-      [ MSCIL.Instruction_Call ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple "Fixup")) (map environmentVariable @loc.recupvalues) ]
+      [ MSCIL.Instruction_Call ["instance"] MSCIL.Type_Void (MSCIL.Identifier_DoubleDot @loc.classname (MSCIL.Identifier_Simple "Fixup")) (map keyToVariable @loc.recupvalues) ]
   | ThunkBind lhs.fixupmaxstack = foldl max ((length @loc.recupvalues) + 1) (zipWith (+) @loc.recupvalmaxstack [1..])
 
 ----
@@ -522,8 +547,8 @@ SEM CThunkBind
 ----
 SEM CTm
   | ContAppl lhs.locals = []
-  | ContAppl loc.contenv = contName @cont
-  | ContAppl loc.valueenv = valueName @val
+  | ContAppl loc.contenv = asKey @cont
+  | ContAppl loc.valueenv = asKey @val
   | ContAppl (loc.continstr,loc.contmaxstack) = readEnv @lhs.env @loc.contenv
   | ContAppl (loc.valinstr,loc.valmaxstack) = readEnv @lhs.env @loc.valueenv
   | ContAppl lhs.instr =
@@ -542,8 +567,8 @@ SEM CTm
 ----
 SEM CTm
   | ThunkEval lhs.locals = []
-  | ThunkEval loc.thunkenv = thunkName @thunk
-  | ThunkEval loc.contenv = contName @cont
+  | ThunkEval loc.thunkenv = asKey @thunk
+  | ThunkEval loc.contenv = asKey @cont
   | ThunkEval (loc.thunkinstr, loc.thunkmaxstack) = readEnv @lhs.env @loc.thunkenv
   | ThunkEval (loc.continstr, loc.contmaxstack) = readEnv @lhs.env @loc.contenv
   | ThunkEval lhs.instr =
@@ -562,9 +587,9 @@ SEM CTm
 ----
 SEM CTm
   | FuncAppl lhs.locals = []
-  | FuncAppl loc.funcenv = valueName @func
-  | FuncAppl loc.contenv = contName @cont
-  | FuncAppl loc.argenv = thunkName @arg
+  | FuncAppl loc.funcenv = asKey @func
+  | FuncAppl loc.contenv = asKey @cont
+  | FuncAppl loc.argenv = asKey @arg
   | FuncAppl (loc.funcinstr, loc.funcmaxstack) = readEnv @lhs.env @loc.funcenv
   | FuncAppl (loc.continstr, loc.contmaxstack) = readEnv @lhs.env @loc.contenv
   | FuncAppl (loc.arginstr, loc.argmaxstack) = readEnv @lhs.env @loc.argenv
@@ -584,7 +609,7 @@ SEM CTm
 -- Exit
 ----
 SEM CTm
-  | Exit (loc.valinstr, loc.valmaxstack) = readEnv @lhs.env (valueName @val)
+  | Exit (loc.valinstr, loc.valmaxstack) = readEnv @lhs.env (asKey @val)
   | Exit lhs.instr =
       @loc.valinstr ++
       [ MSCIL.Instruction_Tail
@@ -599,7 +624,7 @@ SEM CTm
 ----
 ATTR CTm CVal CCaseBranch CCaseBranchL CThunkBind CThunkBindL [ | caseNumber : {Int} | ]
 SEM CTm
-  | Case loc.valenv = valueName @val
+  | Case loc.valenv = asKey @val
   | Case loc.currentNumber = @lhs.caseNumber
   | Case lhs.caseNumber = @lhs.caseNumber + 1
   | Case loc.classname = MSCIL.Identifier_Simple $ "CaseSwitch" ++ (show @loc.currentNumber)
@@ -664,7 +689,7 @@ SEM CCaseBranch
         ["public","static"]
         MSCIL.Type_Void
         @loc.methodname
-        (map environmentVariable @loc.upvalues)
+        (map keyToVariable @loc.upvalues)
         (
           [ MSCIL.Instruction_PseudoMaxStack @body.maxstack
           , MSCIL.Instruction_PseudoLocals @body.locals
@@ -684,7 +709,7 @@ SEM CCasePattern
   | Default lhs.instr = 
       (concat @loc.upvalueinstr) ++ 
       [ MSCIL.Instruction_Tail
-      , MSCIL.Instruction_Call [] MSCIL.Type_Void @lhs.method (map environmentVariable @lhs.bodyupvalues)
+      , MSCIL.Instruction_Call [] MSCIL.Type_Void @lhs.method (map keyToVariable @lhs.bodyupvalues)
       , MSCIL.Instruction_Ret
       ]
   | Default lhs.finalinstr = []
@@ -694,38 +719,35 @@ SEM CCasePattern
   | Tag loc.classname = tagClassName @tag $ length @args
   | Tag loc.label = "Branch" ++ (show @lhs.index)
   | Tag loc.valloc = fromJust $ Map.lookup @lhs.valenv @lhs.env
-  | Tag loc.fieldnames = map thunkName @args
-  | Tag loc.fieldvars = map environmentVariable @loc.fieldnames
-  | Tag loc.fieldtypes = map environmentType @loc.fieldnames
+  | Tag loc.fieldnames = map asKey @args
+  | Tag loc.fieldvars = map keyToVariable @loc.fieldnames
+  | Tag loc.fieldtypes = map keyToType @loc.fieldnames
   | Tag loc.fieldlocs =
       map
         (\(index,t) ->
           Field
             @loc.valloc
-            ( MSCIL.Variable_Variable
-                t
-                (Just $ MSCIL.Identifier_DoubleDot @loc.classname (tagFieldName index))
-            )
+            (tagMemberVar @tag (length @args) index)
         )
         (zip [1..] @loc.fieldtypes)
   | Tag loc.fieldenv = Map.fromList $ zip @loc.fieldnames @loc.fieldlocs
   | Tag loc.restenv =
       case @rest of
         Nothing -> Map.empty
-        Just restname -> Map.singleton (thunkName restname) @loc.valloc
+        Just restname -> Map.singleton (asKey restname) @loc.valloc
   | Tag loc.newenv = @loc.restenv `Map.union` @loc.fieldenv `Map.union` @lhs.env
   | Tag (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @loc.newenv) @lhs.bodyupvalues
   | Tag lhs.instr =
       @loc.valinstr
       ++
-      [ MSCIL.Instruction_IsInst (tagClassName @tag $ length @args)
+      [ MSCIL.Instruction_IsInst @loc.classname
       , MSCIL.Instruction_BrTrue @loc.label
       ]
   | Tag lhs.finalinstr =
       [ MSCIL.Instruction_Label @loc.label ] ++
       (concat @loc.upvalueinstr) ++
       [ MSCIL.Instruction_Tail
-      , MSCIL.Instruction_Call [] MSCIL.Type_Void @lhs.method (map environmentVariable @lhs.bodyupvalues)
+      , MSCIL.Instruction_Call [] MSCIL.Type_Void @lhs.method (map keyToVariable @lhs.bodyupvalues)
       , MSCIL.Instruction_Ret
       ]
   | Tag lhs.maxstack = foldl max (length @lhs.bodyupvalues) $ @loc.valmaxstack : (zipWith (+) @loc.upvaluemaxstack [0..])
@@ -737,24 +759,24 @@ SEM CCasePattern
 ATTR CTm CVal [ | | freevars : {Set.Set EnvironmentKey} ]
 ATTR CThunkBind CThunkBindL [ | | freevars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} boundvars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} ]
 SEM CTm
-  | LetVal lhs.freevars = @bindvalue.freevars `Set.union` (Set.delete (valueName @bindname) @body.freevars)
+  | LetVal lhs.freevars = @bindvalue.freevars `Set.union` (Set.delete (asKey @bindname) @body.freevars)
   | LetCont lhs.freevars = (Set.delete @loc.valueenv @bindbody.freevars) `Set.union` (Set.delete @loc.contenv @body.freevars)
   -- Let op, alleen let thunk kan recursief zijn eigen binds zien.
   | LetThunk lhs.freevars = (@binds.freevars `Set.union` @body.freevars) `Set.difference` @binds.boundvars
-  | ContAppl lhs.freevars = Set.fromList [contName @cont, valueName @val]
-  | ThunkEval lhs.freevars = Set.fromList [thunkName @thunk, contName @cont]
-  | FuncAppl lhs.freevars = Set.fromList [valueName @func, contName @cont, thunkName @arg]
-  | Exit lhs.freevars = Set.fromList [valueName @val]
+  | ContAppl lhs.freevars = Set.fromList [asKey @cont, asKey @val]
+  | ThunkEval lhs.freevars = Set.fromList [asKey @thunk, asKey @cont]
+  | FuncAppl lhs.freevars = Set.fromList [asKey @func, asKey @cont, asKey @arg]
+  | Exit lhs.freevars = Set.fromList [asKey @val]
   | Case lhs.freevars = @branches.freevars
 
 SEM CVal
   | IntVal StringVal lhs.freevars = Set.empty
-  | LamVal lhs.freevars = @body.freevars `Set.difference` (Set.fromList [contName @bindcont, thunkName @bindarg])
-  | TagVal lhs.freevars = Set.fromList $ map thunkName @args
+  | LamVal lhs.freevars = @body.freevars `Set.difference` (Set.fromList [asKey @bindcont, asKey @bindarg])
+  | TagVal lhs.freevars = Set.fromList $ map asKey @args
 
 SEM CThunkBind
-  | ThunkBind lhs.boundvars = Set.fromList [thunkName @thunkname]
-  | ThunkBind lhs.freevars = Set.delete (contName @contname) @body.freevars
+  | ThunkBind lhs.boundvars = Set.fromList [asKey @thunkname]
+  | ThunkBind lhs.freevars = Set.delete (asKey @contname) @body.freevars
 
 ATTR CCasePattern [ | | boundvars : {Set.Set EnvironmentKey} ]
 SEM CCasePattern
@@ -762,8 +784,8 @@ SEM CCasePattern
   | Tag loc.restboundvars =
       case @rest of
         Nothing -> Set.empty
-        Just x -> Set.singleton $ thunkName x
-  | Tag lhs.boundvars = @loc.restboundvars `Set.union` (Set.fromList $ map thunkName @args)
+        Just x -> Set.singleton $ asKey x
+  | Tag lhs.boundvars = @loc.restboundvars `Set.union` (Set.fromList $ map asKey @args)
   | Int lhs.boundvars = Set.empty
 
 ATTR CCaseBranch [ | | boundvars : {Set.Set EnvironmentKey} ]
