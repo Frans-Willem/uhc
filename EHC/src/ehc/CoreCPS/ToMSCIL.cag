@@ -194,7 +194,8 @@ defaultClasses =
   ]
 
 tagClassName :: CTag -> Int -> MSCIL.Identifier
-tagClassName tag arguments = MSCIL.Identifier_Simple $ (show tag) ++ (show arguments)
+tagClassName CTagRec arguments = MSCIL.Identifier_Simple $ "Record" ++ (show arguments)
+tagClassName (CTag {ctagTyNm = tyNm, ctagNm = nm }) _ = MSCIL.Identifier_Simple $ (show tyNm) ++ "_" ++ (show nm)
 
 tagFieldName :: Int -> MSCIL.Identifier
 tagFieldName n = MSCIL.Identifier_Simple $ "field" ++ (show n)
