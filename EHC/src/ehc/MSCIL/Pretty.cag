@@ -14,14 +14,14 @@
 
 %%[(8 core).WRAPPER ag import({MSCIL/AbsSyn})
 WRAPPER
-  Assembly
+  DeclL
 %%]
 
-%%[(8 core) hs export(ppAssembly)
-ppDeclL :: ppDeclL -> PP_Doc
+%%[(8 core) hs export(ppDeclL)
+ppDeclL :: DeclL -> PP_Doc
 ppDeclL l
-  = pp_Syn_DeclL t
-  where t = wrap_DeclL (sem_DeclL chunk)
+  = ppVertically $ pp_Syn_DeclL t
+  where t = wrap_DeclL (sem_DeclL l)
               (Inh_DeclL {})
 %%]
 
@@ -36,7 +36,7 @@ SEM DottedName
   | Cons lhs.isNil = False
   | Nil lhs.pp = empty
   | Cons lhs.pp =
-      case @tl.isNil
+      case @tl.isNil of
         True -> @hd.pp
         False -> @hd.pp >|< text "." >|< @tl.pp
 
@@ -47,24 +47,24 @@ SEM Decl
   | Assembly lhs.pp =
       (text ".assembly" >#< @name.pp) >-<
       text "{" >-<
-      indent 2 @info.pp >-<
+      indent 2 (ppVertically @info.pp) >-<
       text "}"
   | AssemblyExtern lhs.pp =
       (text ".assembly extern" >#< @name.pp) >-<
       text "{" >-<
-      indent 2 @info.pp >-<
+      indent 2 (ppVertically @info.pp) >-<
       text "}"
   | Class lhs.pp =
       (text ".class" >#< @header.pp) >-<
       text "{" >-<
-      indent 2 @members.pp >-<
+      indent 2 (ppVertically @members.pp) >-<
       text "}"
   | Field lhs.pp =
       text ".field" >#< @decl.pp
   | Method lhs.pp =
       (text ".method" >#< @header.pp) >-<
       text "{" >-<
-      indent 2 @body.pp >-<
+      indent 2 (ppVertically @body.pp) >-<
       text "}"
 ATTR DeclL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
 
@@ -83,14 +83,18 @@ ATTR AsmRefDeclL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
 ATTR ClassHeader [ | | pp : {PP_Doc} ]
 SEM ClassHeader
   | ClassHeader lhs.pp =
-      foldl
+      foldr
         (>#<)
-        (foldr
+        (foldl
           (>|<)
           @name.pp
-          (zipWith (>#<) ((text " extends"):(text " implements"):(repeat $ text ",") @attrs.pp)
+          ( zipWith
+              (>#<)
+              ((text " extends"):(text " implements"):(repeat $ text ", "))
+              @extends.pp
+          )
         )
-        (zipWith (>#<)
+        @attrs.pp
 
 ATTR ClassAttr [ | | pp : {PP_Doc} ]
 ATTR ClassAttrL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
@@ -109,14 +113,14 @@ SEM ClassMember
   | Class lhs.pp =
       (text ".class" >#< @header.pp) >-<
       text "{" >-<
-      indent 2 @members.pp >-<
+      indent 2 (ppVertically @members.pp) >-<
       text "}"
   | Field lhs.pp =
       text ".field" >#< @decl.pp
   | Method lhs.pp =
       (text ".method" >#< @header.pp) >-<
       text "{" >-<
-      indent 2 @body.pp >-<
+      indent 2 (ppVertically @body.pp) >-<
       text "}"
 
 ATTR FieldDecl [ | | pp : {PP_Doc} ]
@@ -197,7 +201,9 @@ SEM Param
   | Param lhs.pp = 
       foldr (>#<)
       (
-        @ty.pp >#< id.pp
+        case @id of
+          Nothing -> @ty.pp
+          Just id -> @ty.pp >#< id
       ) 
       @attrs.pp
 
@@ -212,7 +218,7 @@ ATTR MethodBodyItem [ | | pp : {PP_Doc} ]
 ATTR MethodBodyItemL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
 SEM MethodBodyItem
   | EntryPoint lhs.pp = text ".entrypoint"
-  | Locals lhs.pp = text (if @init then ".locals init" else ".locals") >#< ppParensComma' @locals.pp
+  | Locals lhs.pp = text (if @init then ".locals init" else ".locals") >#< ppParensCommas' @locals.pp
   | MaxStack lhs.pp = text ".maxstack" >#< (text $ show @size)
   | Instr lhs.pp = @instr.pp
   | Label lhs.pp = @id.pp >|< ":"

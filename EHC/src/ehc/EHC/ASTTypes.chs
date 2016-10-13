@@ -157,6 +157,6 @@ type AST_LuaBC = LuaBC.CChunk
 %%]
 
 %%[(8 core) export(AST_MSCIL)
-type AST_MSCIL = MSCIL.Assembly
+type AST_MSCIL = MSCIL.DeclL
 %%]
 

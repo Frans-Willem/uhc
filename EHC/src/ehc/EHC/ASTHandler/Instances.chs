@@ -583,7 +583,7 @@ astHandler'_MSCIL =
 			, _asthdlrEcuStore          = ecuStoreMSCIL
 			, _asthdlrMkOutputFPath           = \opts m f suff -> mkPerModuleOutputFPath opts True m f suff
             , _asthdlrPretty			= \opts ecu ast -> Just $
-					let ppMod = MSCILPretty.ppAssembly ast
+					let ppMod = MSCILPretty.ppDeclL ast
 					in  ppMod
 			}
 %%]

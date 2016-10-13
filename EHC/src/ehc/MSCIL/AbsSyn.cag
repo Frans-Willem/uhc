@@ -143,7 +143,7 @@ DATA Param
 	| Param
 		attrs : ParamAttrL
 		ty : Type
-		id : Id
+		id : MbId
 TYPE ParamL = [Param]
 DATA ParamAttr
 	| In
@@ -162,6 +162,8 @@ DATA MethodBodyItem
 		instr : Instruction
 	| Label
 		id : Id
+	| Comment -- Not actually part of MethodBodyItem, but a convenient place to dump some comments
+		data : {String}
 TYPE MethodBodyItemL = [MethodBodyItem]
 
 DATA Instruction
