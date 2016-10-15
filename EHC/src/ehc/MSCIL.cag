@@ -3,230 +3,215 @@
 %include afp.fmt
 %%]
 
-%%[(8 core) hs module {%{EH}MSCIL} import({%{EH}Base.HsName})
+%%[(8 core) hs module {%{EH}MSCIL} import()
 %%]
 
-%%[(8 core) hs export (Id(..), DottedName(..), DottedNameL(..), Decl(..), DeclL(..), AsmDecl(..), AsmDeclL(..), AsmRefDecl(..), AsmRefDeclL(..), ClassHeader(..), ClassAttr(..), ClassAttrL(..), ClassMember(..), ClassMemberL(..), FieldDecl(..), FieldAttr(..), FieldAttrL(..), Type(..), TypeSpec(..), TypeSpecL(..), MbTypeSpec(..), TypeReference(..), ResolutionScope(..), MbResolutionScope(..), AssemblyRefName(..), MethodHeader(..), MethodName(..), Param(..), ParamL(..), ParamAttr(..), ParamAttrL(..), MethodBodyItem(..), MethodBodyItemL(..), Instruction(..), CallConv(..), MbCallConv(..), CallKind(..), Local(..), MbId(..), LocalL(..), MethAttr(..), MethAttrL(..))
+%%[(8 core) hs export (Id(..), DottedName(..), DottedNameL(..), Decl(..), DeclL(..), AsmDecl(..), AsmDeclL(..), AsmRefDecl(..), AsmRefDeclL(..), ClassMember(..), ClassMemberL(..), ClassHeader(..), ClassAttr(..), ClassAttrL(..), FieldDecl(..), FieldAttr(..), FieldAttrL(..), Type(..), TypeSpec(..), TypeSpecL(..), MbTypeSpec(..), TypeReference(..), ResolutionScope(..), MbResolutionScope(..), AssemblyRefName(..), MethodHeader(..), MethodName(..), Param(..), ParamL(..), ParamAttr(..), ParamAttrL(..), MethodBodyItem(..), MethodBodyItemL(..), Instruction(..), CallConv(..), MbCallConv(..), CallKind(..), Local(..), MbId(..), LocalL(..), MethAttr(..), MethAttrL(..))
 %%]
 
 %%[(8 core) ag import({MSCIL/AbsSyn})
 %%]
 
-%%[(8 core) hs export (asId, asDottedName)
-class (AsDottedName a, AsDottedName [a]) => AsId a where
-  asId :: a -> Id
-instance AsId Id where asId = id
-instance AsId String where asId = Id_Id
-instance AsId HsName where asId nm = Id_Id (show nm)
-instance AsDottedName Id where asDottedName = (:[]) . asId
-instance AsDottedName String where asDottedName = (:[]) . asId
-instance AsDottedName HsName where asDottedName = (:[]) . asId
-instance AsMethodName Id where asMethodName = MethodName_Name . asDottedName
-instance AsMethodName String where asMethodName = MethodName_Name . asDottedName
-instance AsMethodName HsName where asMethodName = MethodName_Name . asDottedName
-instance AsL DottedName Id where asList = (:[]) . asDottedName
-instance AsL DottedName String where asList = (:[]) . asDottedName
-instance AsL DottedName HsName where asList = (:[]) . asDottedName
-instance AsTypeReference Id where asTypeReference r = TypeReference_Ref Nothing (asList r)
-instance AsTypeReference String where asTypeReference r = TypeReference_Ref Nothing (asList r)
-instance AsTypeReference HsName where asTypeReference r = TypeReference_Ref Nothing (asList r)
-instance AsType Id where asType = Type_Class . asTypeReference
-instance AsType String where asType = Type_Class . asTypeReference
-instance AsType HsName where asType = Type_Class . asTypeReference
-instance AsParam Id where asParam t = Param_Param [] (asType t) Nothing
-instance AsParam String where asParam t = Param_Param [] (asType t) Nothing
-instance AsParam HsName where asParam t = Param_Param [] (asType t) Nothing
-instance AsL Param [Id] where asList = map asParam
-instance AsL Param [String] where asList = map asParam
-instance AsL Param [HsName] where asList = map asParam
-instance AsDottedName [Id] where asDottedName = map asId
-instance AsDottedName [String] where asDottedName = map asId
-instance AsDottedName [HsName] where asDottedName = map asId
-instance AsMethodName [Id] where asMethodName = MethodName_Name . asDottedName
-instance AsMethodName [String] where asMethodName = MethodName_Name . asDottedName
-instance AsMethodName [HsName] where asMethodName = MethodName_Name . asDottedName
-instance AsL DottedName [Id] where asList = map asDottedName
-instance AsL DottedName [String] where asList = map asDottedName
-instance AsL DottedName [HsName] where asList = map asDottedName
-instance AsL DottedName [[Id]] where asList = map asDottedName
-instance AsL DottedName [[String]] where asList = map asDottedName
-instance AsL DottedName [[HsName]] where asList = map asDottedName
-instance AsTypeReference [Id] where asTypeReference n = TypeReference_Ref Nothing [asDottedName n]
-instance AsTypeReference [String] where asTypeReference n = TypeReference_Ref Nothing [asDottedName n]
-instance AsTypeReference [HsName] where asTypeReference n = TypeReference_Ref Nothing [asDottedName n]
-instance AsType [Id] where asType = Type_Class . asTypeReference
-instance AsType [String] where asType = Type_Class . asTypeReference
-instance AsType [HsName] where asType = Type_Class . asTypeReference
-instance AsParam [Id] where asParam t = Param_Param [] (asType t) Nothing
-instance AsParam [String] where asParam t = Param_Param [] (asType t) Nothing
-instance AsParam [HsName] where asParam t = Param_Param [] (asType t) Nothing
-instance AsL Param [[Id]] where asList = map asParam
-instance AsL Param [[String]] where asList = map asParam
-instance AsL Param [[HsName]] where asList = map asParam
+%%[(8 core) hs export (Convertible(..))
+
+class Convertible a b where convert :: a -> b
+
+-- Default instances
+instance Convertible Id Id where convert = id
+instance Convertible DottedName DottedName where convert = id
+instance Convertible DottedNameL DottedNameL where convert = id
+instance Convertible Decl Decl where convert = id
+instance Convertible DeclL DeclL where convert = id
+instance Convertible AsmDecl AsmDecl where convert = id
+instance Convertible AsmDeclL AsmDeclL where convert = id
+instance Convertible AsmRefDecl AsmRefDecl where convert = id
+instance Convertible AsmRefDeclL AsmRefDeclL where convert = id
+instance Convertible ClassHeader ClassHeader where convert = id
+instance Convertible ClassAttr ClassAttr where convert = id
+instance Convertible ClassAttrL ClassAttrL where convert = id
+instance Convertible ClassMember ClassMember where convert = id
+instance Convertible ClassMemberL ClassMemberL where convert = id
+instance Convertible FieldDecl FieldDecl where convert = id
+instance Convertible FieldAttr FieldAttr where convert = id
+instance Convertible FieldAttrL FieldAttrL where convert = id
+instance Convertible Type Type where convert = id
+instance Convertible TypeSpec TypeSpec where convert = id
+instance Convertible TypeSpecL TypeSpecL where convert = id
+instance Convertible MbTypeSpec MbTypeSpec where convert = id
+instance Convertible TypeReference TypeReference where convert = id
+instance Convertible ResolutionScope ResolutionScope where convert = id
+instance Convertible MbResolutionScope MbResolutionScope where convert = id
+instance Convertible AssemblyRefName AssemblyRefName where convert = id
+instance Convertible MethodHeader MethodHeader where convert = id
+instance Convertible MethodName MethodName where convert = id
+instance Convertible Param Param where convert = id
+instance Convertible ParamL ParamL where convert = id
+instance Convertible ParamAttr ParamAttr where convert = id
+instance Convertible ParamAttrL ParamAttrL where convert = id
+instance Convertible MethodBodyItem MethodBodyItem where convert = id
+instance Convertible MethodBodyItemL MethodBodyItemL where convert = id
+instance Convertible Instruction Instruction where convert = id
+instance Convertible CallConv CallConv where convert = id
+instance Convertible MbCallConv MbCallConv where convert = id
+instance Convertible CallKind CallKind where convert = id
+instance Convertible Local Local where convert = id
+instance Convertible LocalL LocalL where convert = id
+instance Convertible MbId MbId where convert = id
+instance Convertible MethAttr MethAttr where convert = id
+instance Convertible MethAttrL MethAttrL where convert = id
+-- Lists and maybe
+instance {-# OVERLAPPABLE #-} Convertible a b => Convertible [a] [b] where convert = map convert
+instance {-# OVERLAPPABLE #-} Convertible a b => Convertible (Maybe a) (Maybe b) where convert = fmap convert
+-- Helper for Maybe
+instance Convertible () (Maybe a) where convert _ = Nothing
+instance Convertible () [a] where convert _ = []
+--instance Convertible a b => Convertible a (Maybe b) where convert = Just . convert
+
+instance Convertible String Id where convert = Id_Id
+instance Convertible String DottedName where convert = (:[]) . convert
+instance Convertible Id DottedName where convert = (:[])
+
+instance Convertible a Instruction => Convertible a MethodBodyItem where convert = MethodBodyItem_Instr . convert
+
+instance {-# OVERLAPPABLE #-} (Convertible ty Type, Convertible nm Id) => Convertible (ty,nm) Param where
+  convert (ty,nm) = Param_Param [] (convert ty) (Just $ convert nm)
+instance {-# OVERLAPPABLE #-} (Convertible ty Type) => Convertible ty Param where
+  convert ty = Param_Param [] (convert ty) Nothing
+instance (Convertible ty Type, Convertible nm Id) => Convertible (ty,nm) Local where
+  convert (ty, nm) = Local_Local (convert ty) (Just $ convert nm)
+instance (Convertible ty Type, Convertible nm Id) => Convertible (ty,nm) FieldDecl where
+  convert (ty, nm) = FieldDecl_FieldDecl Nothing [] (convert ty) (convert nm)
 
 
-class (AsMethodName a, AsL DottedName a, AsL DottedName [a], AsTypeReference a) => AsDottedName a where
-  asDottedName :: a -> DottedName
-{-
-instance AsDottedName DottedName where asDottedName = id
-instance AsMethodName DottedName where asMethodName = MethodName_Name . asDottedName
-instance AsL DottedName DottedName where asList = (:[]) . asDottedName
-instance AsL DottedName [DottedName] where asList = map asDottedName
-instance AsTypeReference DottedName where asTypeReference n = TypeReference_Ref Nothing (asList n)
-instance AsType DottedName where asType = Type_Class . asTypeReference
-instance AsParam DottedName where asParam t = Param_Param [] (asType t) Nothing
-instance AsL Param [DottedName] where asList = map asParam 
--}
+instance {-# OVERLAPPABLE #-} (Convertible nm DottedName) => Convertible nm TypeReference where
+  convert = (TypeReference_Ref Nothing) . (:[]) . convert
+instance {-# OVERLAPPABLE #-} (Convertible ref TypeReference) => Convertible ref Type where
+  convert = Type_Class . convert
+instance {-# OVERLAPPABLE #-} (Convertible ref TypeReference) => Convertible ref TypeSpec where
+  convert = TypeSpec_Ref . convert
 
-class (AsL MethAttr [a], AsL MethAttr a) => AsMethAttr a where
-  asMethAttr :: a -> MethAttr
-instance AsMethAttr MethAttr where
-  asMethAttr = id
-instance AsL MethAttr [MethAttr] where asList = map asMethAttr
-instance AsL MethAttr MethAttr where asList = (:[]) . asMethAttr
+instance {-# OVERLAPPABLE #-} (Convertible nm DottedName) => Convertible nm MethodName where
+  convert = MethodName_Name . convert
 
-class AsL a b where
-  asList :: b -> [a]
-instance AsL a () where
-  asList _ = []
+instance Convertible () CallConv where
+  convert _ = CallConv_CallConv False False CallKind_Default
+instance {-# OVERLAPPABLE #-} Convertible ck CallKind => Convertible ck CallConv where
+  convert = (CallConv_CallConv False False) . convert
 
-class AsMb CallConv a => AsCallConv a where
-  asCallConv :: a -> CallConv
-instance AsCallConv CallConv where
-  asCallConv = id
-instance AsMb CallConv CallConv where asMb = Just . id
+instance {-# OVERLAPPABLE #-} Convertible a b => Convertible a (Maybe b) where
+  convert = Just . convert
 
-class AsMb a b where
-  asMb :: b -> Maybe a
-instance AsMb a (Maybe a) where
-  asMb = id
-instance AsMb a () where
-  asMb _ = Nothing
-
-class AsCallConv a => AsCallKind a where
-  asCallKind :: a -> CallKind
-instance AsMb CallConv CallKind where asMb = Just . asCallConv . asCallKind
-instance AsCallConv CallKind where asCallConv = (CallConv_CallConv False False) . asCallKind
-instance AsCallKind CallKind where
-  asCallKind = id
-
-class (AsParam a) => AsType a where
-  asType :: a -> Type
-instance AsType Type where asType = id
-instance AsParam Type where asParam n = Param_Param [] n Nothing
-instance AsL Param [Type] where asList = map asParam
-
-class AsMethodName a where
-  asMethodName :: a -> MethodName
-instance AsMethodName MethodName where asMethodName = id
-
-class (AsL Param [a]) => AsParam a where
-  asParam :: a -> Param
-instance AsL Param [Param] where asList = map asParam
-instance AsParam Param where asParam = id
-instance (AsType t, AsId n) => AsParam (t,n) where asParam (t,n) = Param_Param [] (asType t) (Just $ asId n)
-instance (AsType t, AsId n) => (AsL Param [(t,n)]) where asList = map asParam
-
-class (AsL ClassAttr [a]) => AsClassAttr a where
-  asClassAttr :: a -> ClassAttr
-instance AsClassAttr ClassAttr where
-  asClassAttr = id
-instance (AsL ClassAttr [ClassAttr]) where asList = map asClassAttr
-
-class (AsL TypeSpec [a]) => AsTypeSpec a where
-  asTypeSpec :: a -> TypeSpec
-instance AsTypeSpec TypeSpec where asTypeSpec = id
-instance (AsL TypeSpec [TypeSpec]) where asList = map asTypeSpec
-
-class (AsType a) => AsTypeReference a where
-  asTypeReference :: a -> TypeReference
-instance AsTypeReference TypeReference where asTypeReference = id
-instance AsType TypeReference where asType = Type_Class . asTypeReference
-instance AsParam TypeReference where asParam r = Param_Param [] (asType $ asTypeReference r) Nothing
-instance AsL Param TypeReference where asList = (:[]) . asParam
-instance AsL Param [TypeReference] where asList = map asParam
-
-class AsMethodBodyItem a where
-  asMethodBodyItem :: a -> MethodBodyItem
-instance AsMethodBodyItem MethodBodyItem where asMethodBodyItem = id
-
-class (AsMethodBodyItem a) => AsInstruction a where
-  asInstruction :: a -> Instruction
-instance AsInstruction Instruction where asInstruction = id
-instance AsMethodBodyItem Instruction where asMethodBodyItem = MethodBodyItem_Instr . asInstruction
 %%]
-%%[(8 core) hs export(classHeader, methodHeader, ctorHeader, callConv_Instance)
+%%[(8 core) hs export(classHeader, methodHeader, ctorHeader, param, fieldDecl, callConv_Instance)
 
 callConv_Instance :: CallConv
 callConv_Instance = CallConv_CallConv True False CallKind_Default
 
 class CreateMethodHeader a where
   methodHeader :: a
-instance (AsL MethAttr attr, AsMb CallConv cc, AsType ty, AsMethodName nm, AsL Param param) => CreateMethodHeader (attr -> cc -> ty -> nm -> param -> MethodHeader) where
+instance (Convertible attr MethAttrL, Convertible cc MbCallConv, Convertible ty Type, Convertible nm MethodName, Convertible param ParamL) => CreateMethodHeader (attr -> cc -> ty -> nm -> param -> MethodHeader) where
   methodHeader attr cc ty nm param =
     MethodHeader_MethodHeader
-      (asList attr)
-      (asMb cc)
-      (asType ty)
-      (asMethodName nm)
-      (asList param)
-instance (AsL MethAttr attr, AsType ty, AsMethodName nm, AsL Param param) => CreateMethodHeader (attr -> ty -> nm -> param -> MethodHeader) where
+      (convert attr)
+      (convert cc)
+      (convert ty)
+      (convert nm)
+      (convert param)
+instance (Convertible attr MethAttrL, Convertible ty Type, Convertible nm MethodName, Convertible param ParamL) => CreateMethodHeader (attr -> ty -> nm -> param -> MethodHeader) where
   methodHeader attr ty nm param = methodHeader attr (Nothing :: MbCallConv) ty nm param
-instance (AsType ty, AsMethodName nm, AsL Param param) => CreateMethodHeader (ty -> nm -> param -> MethodHeader) where
+instance (Convertible ty Type, Convertible nm MethodName, Convertible param ParamL) => CreateMethodHeader (ty -> nm -> param -> MethodHeader) where
   methodHeader = methodHeader ([] :: MethAttrL)
-instance (AsMethodName nm, AsL Param param) => CreateMethodHeader (nm -> param -> MethodHeader) where
+instance (Convertible nm MethodName, Convertible param ParamL) => CreateMethodHeader (nm -> param -> MethodHeader) where
   methodHeader = methodHeader Type_Void
-instance (AsMethodName nm) => CreateMethodHeader (nm -> MethodHeader) where
+instance (Convertible nm MethodName) => CreateMethodHeader (nm -> MethodHeader) where
   methodHeader nm = methodHeader nm ([] :: ParamL)
 
-ctorHeader :: (AsL Param a) => a -> MethodHeader
+ctorHeader :: (Convertible a ParamL) => a -> MethodHeader
 ctorHeader params = 
   MethodHeader_MethodHeader
     [MethAttr_Public, MethAttr_SpecialName, MethAttr_RtSpecialName]
     (Just $ callConv_Instance)
     Type_Void
     MethodName_Ctor
-    (asList params)
+    (convert params)
 
 class CreateClassHeader a where
   classHeader :: a
-instance (AsId nm) => CreateClassHeader (nm -> ClassHeader) where
+instance (Convertible nm Id) => CreateClassHeader (nm -> ClassHeader) where
   classHeader = classHeader ([] :: ClassAttrL)
-instance (AsL ClassAttr attr, AsId nm) => CreateClassHeader (attr -> nm -> ClassHeader) where
+instance (Convertible attr ClassAttrL, Convertible nm Id) => CreateClassHeader (attr -> nm -> ClassHeader) where
   classHeader attr nm = classHeader attr nm ([] :: TypeSpecL)
-instance (AsL ClassAttr attr, AsId nm, AsL TypeSpec tysp) => CreateClassHeader (attr -> nm -> tysp -> ClassHeader) where
+instance (Convertible attr ClassAttrL, Convertible nm Id, Convertible tysp TypeSpecL) => CreateClassHeader (attr -> nm -> tysp -> ClassHeader) where
   classHeader attr nm tysp =
     ClassHeader_ClassHeader
-      (asList attr)
-      (asId nm)
-      (asList tysp)
+      (convert attr)
+      (convert nm)
+      (convert tysp)
+
+class CreateParam a where
+  param :: a
+instance (Convertible t Type) => CreateParam (t -> Param) where
+  param t = Param_Param [] (convert t) Nothing
+instance (Convertible t Type, Convertible i Id) => CreateParam (t -> i -> Param) where
+  param t i = Param_Param [] (convert t) (Just $ convert i)
+
+class CreateFieldDecl a where
+  fieldDecl :: a
+instance (Convertible t Type, Convertible i Id) => CreateFieldDecl (t -> i -> FieldDecl) where
+  fieldDecl t i = FieldDecl_FieldDecl Nothing [] (convert t) (convert i)
 %%]
 
-%%[(8 core) hs export(instrRet, instrLdLoc, instrLdArg, instrLdFld, instrLdNull, instrLdStr, instrCall)
+%%[(8 core) hs export(instrRet, instrLdArg, instrLdStr, instrLdcI4, instrLdNull, instrLdLoc, instrStLoc, instrLdFld, instrStFld, instrTail, instrCall, instrCallVirt, instrNewObj, instrBox, instrIsInst, instrPop, instrBrFalse, instrBrTrue)
 
-instrRet = asMethodBodyItem Instruction_Ret
-instrLdLoc = asMethodBodyItem . Instruction_LdLoc
-instrLdArg = asMethodBodyItem . Instruction_LdArg
-instrLdFld = error "TODO: instrLdFld"
-instrLdNull = asMethodBodyItem Instruction_LdNull
-instrLdStr = asMethodBodyItem . Instruction_LdStr
-instrCall = error "TODO: instrCall"
-{-
 instrRet :: MethodBodyItem
-instrRet = cast Instruction_Ret
-instrLdLoc :: Int -> MethodBodyItem
-instrLdLoc = cast Instruction_LdLoc
+instrRet = convert Instruction_Ret
+
 instrLdArg :: Int -> MethodBodyItem
-instrLdArg = cast Instruction_LdArg
-instrLdFld :: (Castable a Type, Castable b TypeSpec, Castable c Id) => a -> b -> c -> MethodBodyItem
-instrLdFld = cast Instruction_LdFld
-instrLdNull :: MethodBodyItem
-instrLdNull = cast Instruction_LdNull
+instrLdArg = convert . Instruction_LdArg
+
 instrLdStr :: String -> MethodBodyItem
-instrLdStr = cast Instruction_LdStr
-instrCall :: (Castable a CallConv, Castable b Type, Castable c (Maybe TypeSpec), Castable d MethodName, Castable e ParamL) => a -> b -> c -> d -> e -> MethodBodyItem
-instrCall = cast Instruction_Call
--}
+instrLdStr = convert . Instruction_LdStr
+
+instrLdcI4 :: Int -> MethodBodyItem
+instrLdcI4 = convert . Instruction_LdcI4
+
+instrLdNull :: MethodBodyItem
+instrLdNull = convert Instruction_LdNull
+
+instrLdLoc :: Int -> MethodBodyItem
+instrLdLoc = convert . Instruction_LdLoc
+instrStLoc :: Int -> MethodBodyItem
+instrStLoc = convert . Instruction_StLoc
+
+instrLdFld :: (Convertible ty Type, Convertible cls TypeSpec, Convertible i Id) => ty -> cls -> i -> MethodBodyItem
+instrLdFld ty cls i = convert $ Instruction_LdFld (convert ty) (convert cls) (convert i)
+instrStFld :: (Convertible ty Type, Convertible cls TypeSpec, Convertible i Id) => ty -> cls -> i -> MethodBodyItem
+instrStFld ty cls i = convert $ Instruction_StFld (convert ty) (convert cls) (convert i)
+
+instrTail :: MethodBodyItem
+instrTail = convert Instruction_Tail
+
+instrCall :: (Convertible conv CallConv, Convertible ret Type, Convertible tysp MbTypeSpec, Convertible name MethodName, Convertible params ParamL) => conv -> ret -> tysp -> name -> params -> MethodBodyItem
+instrCall conv ret tysp name params = convert $ Instruction_Call (convert conv) (convert ret) (convert tysp) (convert name) (convert params)
+instrCallVirt :: (Convertible conv CallConv, Convertible ret Type, Convertible tysp MbTypeSpec, Convertible name MethodName, Convertible params ParamL) => conv -> ret -> tysp -> name -> params -> MethodBodyItem
+instrCallVirt conv ret tysp name params = convert $ Instruction_CallVirt (convert conv) (convert ret) (convert tysp) (convert name) (convert params)
+instrNewObj :: (Convertible conv CallConv, Convertible ret Type, Convertible tysp MbTypeSpec, Convertible name MethodName, Convertible params ParamL) => conv -> ret -> tysp -> name -> params -> MethodBodyItem
+instrNewObj conv ret tysp name params = convert $ Instruction_NewObj (convert conv) (convert ret) (convert tysp) (convert name) (convert params)
+
+instrBox :: (Convertible ty TypeSpec) => ty -> MethodBodyItem
+instrBox t = convert $ Instruction_Box (convert t)
+
+instrIsInst :: (Convertible ty TypeSpec) => ty -> MethodBodyItem
+instrIsInst t = convert $ Instruction_IsInst (convert t)
+
+instrPop :: MethodBodyItem
+instrPop = convert Instruction_Pop
+
+instrBrFalse :: (Convertible l Id) => l -> MethodBodyItem
+instrBrFalse l = convert $ Instruction_BrFalse (convert l)
+
+instrBrTrue :: (Convertible l Id) => l -> MethodBodyItem
+instrBrTrue l = convert $ Instruction_BrTrue (convert l)
 %%]
 
 %%[(8 core) hs export(typeSpec2type, typeClass)
@@ -235,6 +220,6 @@ typeSpec2type (TypeSpec_Ref ref) = Just $ Type_Class ref
 typeSpec2type (TypeSpec_Type ty) = Just ty
 typeSpec2type (TypeSpec_External _) = Nothing
 
-typeClass :: (AsTypeReference a) => a -> Type
-typeClass = Type_Class . asTypeReference
+typeClass :: (Convertible a TypeReference) => a -> Type
+typeClass = Type_Class . convert
 %%]
