@@ -222,13 +222,14 @@ SEM MethodBodyItem
   | MaxStack lhs.pp = text ".maxstack" >#< (text $ show @size)
   | Instr lhs.pp = @instr.pp
   | Label lhs.pp = @id.pp >|< ":"
+  | Comment lhs.pp = text "//" >#< text @data
 
 ATTR Instruction [ | | pp : {PP_Doc} ]
 SEM Instruction
   | Ret lhs.pp = text "ret"
   | LdArg lhs.pp = text "ldarg" >#< (text $ show @index)
   | LdStr lhs.pp = text "ldstr" >#< (text $ show @value)
-  | LdcI4 lhs.pp = text "ldci4" >#< (text $ show @value)
+  | LdcI4 lhs.pp = text "ldc.i4" >#< (text $ show @value)
   | LdNull lhs.pp = text "ldnull"
   | LdLoc lhs.pp = text "ldloc" >#< (text $ show @index)
   | StLoc lhs.pp = text "stloc" >#< (text $ show @index)
