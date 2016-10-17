@@ -14,6 +14,8 @@
 %%]
 %%[(8 core) hs import(qualified Data.Map.Strict as Map, qualified Data.Set as Set)
 %%]
+%%[(8 core) hs import({%{EH}Ty}, {%{EH}Base.TermLike},{%{EH}Base.HsName.Builtin})
+%%]
 
 %%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn})
 WRAPPER CTm
@@ -294,6 +296,18 @@ debugOutputInstrs s
     
 typeSpecInt :: MSCIL.TypeSpec
 typeSpecInt = MSCIL.TypeSpec_Ref $ MSCIL.TypeReference_Ref (Just $ MSCIL.ResolutionScope_AssemblyRefName $ MSCIL.AssemblyRefName_AssemblyRefName $ MSCIL.convert "mscorlib") [MSCIL.convert ["System","Int32"]]
+
+boxInstr :: Ty -> [MSCIL.MethodBodyItem]
+boxInstr ty =
+  if (appMbCon ty == Just hsnInt)
+    then [MSCIL.instrBox typeSpecInt]
+    else []
+
+unboxInstr :: Ty -> [MSCIL.MethodBodyItem]
+unboxInstr ty =
+  if (appMbCon ty == Just hsnInt)
+    then [MSCIL.instrUnboxAny typeSpecInt]
+    else []
 %%]
 
 %%[(8 core) ag
@@ -402,6 +416,18 @@ SEM CVal
       [ MSCIL.instrNewObj MSCIL.callConv_Instance MSCIL.Type_Void @loc.classname MSCIL.MethodName_Ctor @loc.argkey
       ]
   | TagVal lhs.maxstack = foldr max (length @args) (zipWith (+) @loc.argmaxstack [0..])
+  | FFIVal (loc.argsty, loc.retty) = appUnArr @ty
+  | FFIVal loc.argkeys = map asKey @args
+  | FFIVal (loc.argsinstr, loc.argsmaxstack) = unzip $ map (readEnv @lhs.env) @loc.argkeys
+  | FFIVal loc.unboxinstr = map unboxInstr @loc.argsty 
+  | FFIVal loc.boxinstr = boxInstr @loc.retty
+  | FFIVal lhs.instr = 
+    [MSCIL.MethodBodyItem_Comment $ "ArgKeys: " ++ (show @argkeys)] ++
+    [MSCIL.MethodBodyItem_Comment $ "ArgTypes: " ++ (show @argsty)] ++
+    (concat $ zipWith (++) @loc.argsinstr @loc.unboxinstr) ++
+    [MSCIL.MethodBodyItem_Raw @instr] ++ 
+    @loc.boxinstr
+  | FFIVal lhs.maxstack = foldr max (length @args `max` 1) (zipWith (+) @loc.argsmaxstack [0..])
 ----
 -- LetCont
 ----
@@ -819,6 +845,7 @@ SEM CVal
   | IntVal StringVal lhs.freevars = Set.empty
   | LamVal lhs.freevars = @body.freevars `Set.difference` (Set.fromList [asKey @bindcont, asKey @bindarg])
   | TagVal lhs.freevars = Set.fromList $ map asKey @args
+  | FFIVal lhs.freevars = Set.fromList $ map asKey @args
 
 SEM CThunkBind
   | ThunkBind lhs.boundvars = Set.fromList [asKey @thunkname]
