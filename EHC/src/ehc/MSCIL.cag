@@ -161,7 +161,7 @@ instance (Convertible t Type, Convertible i Id) => CreateFieldDecl (t -> i -> Fi
   fieldDecl t i = FieldDecl_FieldDecl Nothing [] (convert t) (convert i)
 %%]
 
-%%[(8 core) hs export(instrRet, instrLdArg, instrLdStr, instrLdcI4, instrLdNull, instrLdLoc, instrStLoc, instrLdFld, instrStFld, instrTail, instrCall, instrCallVirt, instrNewObj, instrBox, instrIsInst, instrPop, instrBrFalse, instrBrTrue)
+%%[(8 core) hs export(instrRet, instrLdArg, instrLdStr, instrLdcI4, instrLdNull, instrLdLoc, instrStLoc, instrLdFld, instrStFld, instrTail, instrCall, instrCallVirt, instrNewObj, instrBox, instrUnboxAny, instrIsInst, instrPop, instrBrFalse, instrBrTrue)
 
 instrRet :: MethodBodyItem
 instrRet = convert Instruction_Ret
@@ -200,6 +200,9 @@ instrNewObj conv ret tysp name params = convert $ Instruction_NewObj (convert co
 
 instrBox :: (Convertible ty TypeSpec) => ty -> MethodBodyItem
 instrBox t = convert $ Instruction_Box (convert t)
+
+instrUnboxAny :: (Convertible ty TypeSpec) => ty -> MethodBodyItem
+instrUnboxAny t = convert $ Instruction_UnboxAny (convert t)
 
 instrIsInst :: (Convertible ty TypeSpec) => ty -> MethodBodyItem
 instrIsInst t = convert $ Instruction_IsInst (convert t)

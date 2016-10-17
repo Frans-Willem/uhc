@@ -223,6 +223,7 @@ SEM MethodBodyItem
   | Instr lhs.pp = @instr.pp
   | Label lhs.pp = @id.pp >|< ":"
   | Comment lhs.pp = text "//" >#< text @data
+  | Raw lhs.pp = text @data
 
 ATTR Instruction [ | | pp : {PP_Doc} ]
 SEM Instruction
@@ -241,6 +242,7 @@ SEM Instruction
   | Call lhs.pp = text "call" >#< @conv.pp >#< @ret.pp >#< @loc.prefixcls @name.pp >|< ppParensCommas' @params.pp
   | NewObj lhs.pp = text "newobj" >#< @conv.pp >#< @ret.pp >#< @loc.prefixcls @name.pp >|< ppParensCommas' @params.pp
   | Box lhs.pp = text "box" >#< @cls.pp
+  | UnboxAny lhs.pp = text "unbox.any" >#< @cls.pp
   | IsInst lhs.pp = text "isinst" >#< @cls.pp
   | Pop lhs.pp = text "pop"
   | BrFalse lhs.pp = text "brfalse" >#< @label.pp

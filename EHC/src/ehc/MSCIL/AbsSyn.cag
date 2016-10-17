@@ -164,6 +164,8 @@ DATA MethodBodyItem
 		id : Id
 	| Comment -- Not actually part of MethodBodyItem, but a convenient place to dump some comments
 		data : {String}
+  | Raw
+    data : {String}
 TYPE MethodBodyItemL = [MethodBodyItem]
 
 DATA Instruction
@@ -208,6 +210,8 @@ DATA Instruction
 		params : ParamL
 	| Box
 		cls : TypeSpec
+  | UnboxAny
+    cls : TypeSpec
 	| IsInst
 		cls : TypeSpec
 	| Pop
