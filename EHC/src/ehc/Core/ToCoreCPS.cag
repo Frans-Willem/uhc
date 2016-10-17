@@ -242,16 +242,17 @@ SEM CExpr
                 [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsAppContName @func.cpsTrans]
                 @lhs.cpsContent
 
-{- Integer transformation -}
+{- Integer & String transformation -}
 SEM CExpr
-  | Int loc.cpsValueNumber : UNIQUEREF cpsFreshValueCounter
-  | Int loc.cpsValueName = createFreshValueName @loc.cpsValueNumber
-  | Int loc.cpsThunkNumber : UNIQUEREF cpsFreshThunkCounter
-  | Int loc.cpsThunkName = createFreshThunkName @loc.cpsThunkNumber
-  | Int loc.cpsFreshContNumber : UNIQUEREF cpsFreshContCounter
-  | Int loc.cpsFreshContName = createFreshContName @loc.cpsFreshContNumber
+  | Int String loc.cpsValueNumber : UNIQUEREF cpsFreshValueCounter
+  | Int String loc.cpsValueName = createFreshValueName @loc.cpsValueNumber
+  | Int String loc.cpsThunkNumber : UNIQUEREF cpsFreshThunkCounter
+  | Int String loc.cpsThunkName = createFreshThunkName @loc.cpsThunkNumber
+  | Int String loc.cpsFreshContNumber : UNIQUEREF cpsFreshContCounter
+  | Int String loc.cpsFreshContName = createFreshContName @loc.cpsFreshContNumber
   | Int loc.cpsValue = CPS.CVal_IntVal @int
-  | Int lhs.cpsTrans =
+  | String loc.cpsValue = CPS.CVal_StringVal @str
+  | Int String lhs.cpsTrans =
       case @lhs.cpsScheme of
         CPSTranslationScheme_Value ->
           CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue @lhs.cpsContent
