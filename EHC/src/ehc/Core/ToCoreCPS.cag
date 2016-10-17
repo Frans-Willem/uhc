@@ -194,16 +194,19 @@ SEM CExpr
         True -> @func.cpsThunkName
         False -> createFreshThunkName @loc.cpsThunkNumber
   | App func.cpsScheme =
-      case @func.isTag of
+      case (@func.isTag || @func.isFFI) of
         True -> @lhs.cpsScheme
         False -> CPSTranslationScheme_Value
   | App func.cpsContent =
-      case @func.isTag of
+      case (@func.isTag || @func.isFFI) of
         True -> @lhs.cpsContent
         False -> @arg.cpsTrans
-  | App arg.cpsScheme = CPSTranslationScheme_Thunk
+  | App arg.cpsScheme =
+      case @func.isFFI of
+        True -> CPSTranslationScheme_Value
+        False -> CPSTranslationScheme_Thunk
   | App arg.cpsContent =
-      case @func.isTag of
+      case (@func.isTag || @func.isFFI) of
         True -> @func.cpsTrans
         False ->
           case @lhs.cpsScheme of
@@ -226,8 +229,9 @@ SEM CExpr
                 @loc.cpsAppContName
                 @arg.cpsThunkName
   | App func.tagArgs = @arg.cpsThunkName : @lhs.tagArgs
+  | App func.ffiArgs = @arg.cpsValueName : @lhs.ffiArgs
   | App lhs.cpsTrans = 
-      case @func.isTag of
+      case (@func.isTag || @func.isFFI) of
         True -> @arg.cpsTrans
         False ->
           case @lhs.cpsScheme of
@@ -353,6 +357,32 @@ ATTR CPatFldL [ | | cpsTrans USE {:} {[]} : {[CPS.ThunkName]} ]
 ATTR CPatFld [ | | cpsTrans : {CPS.ThunkName} ]
 SEM CPatFld
   | Fld lhs.cpsTrans = @bind.cpsBindName
+
+{- FFI transformation -}
+ATTR CExpr [ ffiArgs : {[CPS.ValueName]} | | isFFI : {Bool} ]
+SEM CExpr
+  | FFI lhs.isFFI = True
+  | App lhs.isFFI = @func.isFFI
+  | * - App FFI lhs.isFFI = False
+  | FFI loc.cpsValueNumber : UNIQUEREF cpsFreshValueCounter
+  | FFI loc.cpsValueName = createFreshValueName @loc.cpsValueNumber
+  | FFI loc.cpsThunkNumber : UNIQUEREF cpsFreshThunkCounter
+  | FFI loc.cpsThunkName = createFreshThunkName @loc.cpsThunkNumber
+  | FFI loc.cpsFreshContNumber : UNIQUEREF cpsFreshContCounter
+  | FFI loc.cpsFreshContName = createFreshContName @loc.cpsFreshContNumber
+  | FFI loc.cpsValue = CPS.CVal_FFIVal @impEnt @lhs.ffiArgs @ty
+  | FFI lhs.cpsTrans =
+      case @lhs.cpsScheme of
+        CPSTranslationScheme_Value ->
+          CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue @lhs.cpsContent
+        CPSTranslationScheme_ContinuationCall ->
+          CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue (CPS.CTm_ContAppl @lhs.cpsContName @loc.cpsValueName)
+        CPSTranslationScheme_Thunk ->
+          CPS.CTm_LetThunk [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsFreshContName (CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue (CPS.CTm_ContAppl @loc.cpsFreshContName @loc.cpsValueName))] @lhs.cpsContent
+
+SEM CBound
+  | Val expr.ffiArgs = []
+  | Bind expr.ffiArgs = []
           
 %%]
 
