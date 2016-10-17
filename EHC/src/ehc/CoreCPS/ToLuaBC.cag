@@ -14,6 +14,8 @@
 %%]
 %%[(8 core) hs import(qualified Data.Map.Strict as Map, qualified Data.Set as Set)
 %%]
+%%[(8 core) hs import({%{EH}Ty})
+%%]
 
 %%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn})
 WRAPPER CTm
@@ -259,4 +261,5 @@ SEM CVal
   | IntVal lhs.consts = @lhs.consts ++ [LuaBC.CConstant_Number $ fromIntegral @value]
   | IntVal StringVal lhs.instr = [LuaBC.CInstruction_LoadK @lhs.target (length @lhs.consts)]
   | IntVal StringVal lhs.maxstack = @lhs.target + 1
+  | FFIVal lhs.instr = []
 %%]

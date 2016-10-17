@@ -9,7 +9,7 @@
 
 %%[(8 core) hs module {%{EH}CoreCPS.Pretty} import(UHC.Util.Pretty,{%{EH}CoreCPS})
 %%]
-%%[(8 core) hs import({%{EH}Ty.Pretty})
+%%[(8 core) hs import({%{EH}Ty}, {%{EH}Ty.Pretty})
 %%]
 
 %%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn})
@@ -68,6 +68,8 @@ SEM CVal
       = text "(\\" >|< @bindcont >#< @bindarg >#< text "->" >#< @body.pp >|< text ")"
   | TagVal lhs.pp
       = text "#Tag" >#< ppSpaces ((pp @tag) : map pp @args)
+  | FFIVal lhs.pp
+      = text "FFI" >#< (foldr1 (>#<) (ppParens ((text $ show @instr) >#< (text "::") >#< (pp @ty)) : map pp @args))
 
 ATTR CCaseBranchL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
 ATTR CCasePattern [ | | pp : {PP_Doc} ]

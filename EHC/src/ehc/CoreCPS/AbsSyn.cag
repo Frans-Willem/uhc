@@ -14,6 +14,10 @@ DATA CVal
   | TagVal
       tag : {CTag}
       args: {[ThunkName]}
+  | FFIVal
+      instr : {String}
+      args: {[ValueName]}
+      ty : {Ty}
 DATA CThunkBind
   | ThunkBind
       thunkname : {ThunkName}

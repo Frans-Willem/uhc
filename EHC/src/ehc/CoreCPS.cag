@@ -3,7 +3,7 @@
 %include afp.fmt
 %%]
 
-%%[(8 core) hs module {%{EH}CoreCPS} import()
+%%[(8 core) hs module {%{EH}CoreCPS} import({%{EH}Ty})
 %%]
 
 %%[(8 core) hs export( CVal(..), CTm(..), CThunkBind(..), CThunkBindL(..), ValueName(..), ContName(..), ThunkName(..), CTag(..), CCasePattern(..), CCaseBranch(..), CCaseBranchL(..))
