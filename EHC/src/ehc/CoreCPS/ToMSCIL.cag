@@ -434,7 +434,7 @@ SEM CVal
 SEM CTm
   | LetCont loc.contkey = asKey @contname
   | LetCont loc.valuekey = asKey @valname
-  | LetCont lhs.locals = (MSCIL.convert @loc.valuekey) : @body.locals
+  | LetCont lhs.locals = (MSCIL.convert @loc.contkey) : @body.locals
   | LetCont loc.target = @lhs.localoffset
   | LetCont lhs.localoffset = @lhs.localoffset + 1
   | LetCont loc.classname = continuationClassName @contname
