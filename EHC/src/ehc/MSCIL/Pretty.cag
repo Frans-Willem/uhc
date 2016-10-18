@@ -144,12 +144,18 @@ SEM FieldAttr
   | Static lhs.pp = text "static"
 
 ATTR Type [ | | pp : {PP_Doc} ]
+ATTR TypeL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
 SEM Type
+  | GenTypeParam lhs.pp = text "!" >|< (text $ show @index)
+  | GenMethodParam lhs.pp = text "!!" >|< (text $ show @index)
   | Bool lhs.pp = text "bool"
   | Char lhs.pp = text "char"
   | Class lhs.pp = text "class" >#< @ref.pp
+  | NativeInt lhs.pp = text "native int"
+  | NativeUInt lhs.pp = text "native unsigned int"
   | Object lhs.pp = text "object"
   | String lhs.pp = text "string"
+  | GenType lhs.pp = @base.pp >|< ppListSep "<" ">" ", " @args.pp
   | Void lhs.pp = text "void"
 
 ATTR TypeSpec [ | | pp : {PP_Doc} ]

@@ -6,7 +6,7 @@
 %%[(8 core) hs module {%{EH}MSCIL} import()
 %%]
 
-%%[(8 core) hs export (Id(..), DottedName(..), DottedNameL(..), Decl(..), DeclL(..), AsmDecl(..), AsmDeclL(..), AsmRefDecl(..), AsmRefDeclL(..), ClassMember(..), ClassMemberL(..), ClassHeader(..), ClassAttr(..), ClassAttrL(..), FieldDecl(..), FieldAttr(..), FieldAttrL(..), Type(..), TypeSpec(..), TypeSpecL(..), MbTypeSpec(..), TypeReference(..), ResolutionScope(..), MbResolutionScope(..), AssemblyRefName(..), MethodHeader(..), MethodName(..), Param(..), ParamL(..), ParamAttr(..), ParamAttrL(..), MethodBodyItem(..), MethodBodyItemL(..), Instruction(..), CallConv(..), MbCallConv(..), CallKind(..), Local(..), MbId(..), LocalL(..), MethAttr(..), MethAttrL(..))
+%%[(8 core) hs export (Id(..), DottedName(..), DottedNameL(..), Decl(..), DeclL(..), AsmDecl(..), AsmDeclL(..), AsmRefDecl(..), AsmRefDeclL(..), ClassMember(..), ClassMemberL(..), ClassHeader(..), ClassAttr(..), ClassAttrL(..), FieldDecl(..), FieldAttr(..), FieldAttrL(..), Type(..), TypeL(..), TypeSpec(..), TypeSpecL(..), MbTypeSpec(..), TypeReference(..), ResolutionScope(..), MbResolutionScope(..), AssemblyRefName(..), MethodHeader(..), MethodName(..), Param(..), ParamL(..), ParamAttr(..), ParamAttrL(..), MethodBodyItem(..), MethodBodyItemL(..), Instruction(..), CallConv(..), MbCallConv(..), CallKind(..), Local(..), MbId(..), LocalL(..), MethAttr(..), MethAttrL(..))
 %%]
 
 %%[(8 core) ag import({MSCIL/AbsSyn})
@@ -35,6 +35,7 @@ instance Convertible FieldDecl FieldDecl where convert = id
 instance Convertible FieldAttr FieldAttr where convert = id
 instance Convertible FieldAttrL FieldAttrL where convert = id
 instance Convertible Type Type where convert = id
+instance Convertible TypeL TypeL where convert = id
 instance Convertible TypeSpec TypeSpec where convert = id
 instance Convertible TypeSpecL TypeSpecL where convert = id
 instance Convertible MbTypeSpec MbTypeSpec where convert = id
@@ -87,8 +88,8 @@ instance {-# OVERLAPPABLE #-} (Convertible nm DottedName) => Convertible nm Type
   convert = (TypeReference_Ref Nothing) . (:[]) . convert
 instance {-# OVERLAPPABLE #-} (Convertible ref TypeReference) => Convertible ref Type where
   convert = Type_Class . convert
-instance {-# OVERLAPPABLE #-} (Convertible ref TypeReference) => Convertible ref TypeSpec where
-  convert = TypeSpec_Ref . convert
+instance {-# OVERLAPPABLE #-} (Convertible ty Type) => Convertible ty TypeSpec where
+  convert = TypeSpec_Type . convert
 
 instance {-# OVERLAPPABLE #-} (Convertible nm DottedName) => Convertible nm MethodName where
   convert = MethodName_Name . convert
@@ -100,6 +101,12 @@ instance {-# OVERLAPPABLE #-} Convertible ck CallKind => Convertible ck CallConv
 
 instance {-# OVERLAPPABLE #-} Convertible a b => Convertible a (Maybe b) where
   convert = Just . convert
+
+instance (Convertible a AssemblyRefName) => Convertible a ResolutionScope where
+  convert = ResolutionScope_AssemblyRefName . convert
+instance (Convertible a DottedName) => Convertible a AssemblyRefName where
+  convert = AssemblyRefName_AssemblyRefName . convert
+
 
 %%]
 %%[(8 core) hs export(classHeader, methodHeader, ctorHeader, param, fieldDecl, callConv_Instance)

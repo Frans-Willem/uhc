@@ -93,13 +93,23 @@ DATA FieldAttr
 TYPE FieldAttrL = [FieldAttr]
 
 DATA Type
+  | GenTypeParam
+      index : {Int}
+  | GenMethodParam
+      index : {Int}
 	| Bool
 	| Char
 	| Class
 		ref : TypeReference
+  | NativeInt
+  | NativeUInt
 	| Object
 	| String
+  | GenType
+      base : Type
+      args : TypeL
 	| Void
+TYPE TypeL = [Type]
 
 DATA TypeSpec
 	| External
