@@ -31,7 +31,7 @@ cps2cil tm
     ++ (classes_Syn_CTm t)
     ++
     [ MSCIL.Decl_Method
-        (MSCIL.methodHeader [MSCIL.MethAttr_Static] MSCIL.Type_Void "main" ())
+        (MSCIL.methodHeader [MSCIL.MethAttr_Static] MSCIL.Type_Void (MSCIL.stringToMethodName "main") ([] :: MSCIL.ParamL))
         (
           [ MSCIL.MethodBodyItem_EntryPoint
           , MSCIL.MethodBodyItem_MaxStack (maxstack_Syn_CTm t)
@@ -47,12 +47,12 @@ cps2cil tm
 defaultImports :: MSCIL.DeclL
 defaultImports =
   [ MSCIL.Decl_AssemblyExtern
-      [MSCIL.convert "mscorlib"]
+      (MSCIL.stringToDottedName "mscorlib")
       [ MSCIL.AsmRefDecl_Ver 4 0 0 0
       , MSCIL.AsmRefDecl_PubKeyToken [0xB7, 0x7A, 0x5C, 0x56, 0x19, 0x34, 0xE0, 0x89]
       ]
   , MSCIL.Decl_AssemblyExtern
-      [MSCIL.convert "cpslib"]
+      (MSCIL.stringToDottedName "cpslib")
       [ MSCIL.AsmRefDecl_Ver 0 0 0 0
       ]
   ]
@@ -60,7 +60,7 @@ defaultImports =
 defaultAssembly :: MSCIL.DeclL
 defaultAssembly =
   [ MSCIL.Decl_Assembly
-      [MSCIL.convert "tempname"]
+      (MSCIL.stringToDottedName "tempname")
       [ MSCIL.AsmDecl_Ver 0 0 0 0
       , MSCIL.AsmDecl_HashAlgorithm 0x8004
       ]
@@ -69,12 +69,15 @@ defaultAssembly =
 defaultClasses :: MSCIL.DeclL
 defaultClasses = []
 
+cpslibResolutionScope :: MSCIL.ResolutionScope
+cpslibResolutionScope = MSCIL.ResolutionScope_AssemblyRefName $ MSCIL.stringToAssemblyRefName "cpslib"
+
 continuationBase :: MSCIL.Type -> MSCIL.Type
 continuationBase valueType
   = MSCIL.Type_GenType
       ( MSCIL.Type_Class $
-        MSCIL.TypeReference_Ref (MSCIL.convert "cpslib")
-        [MSCIL.convert "Continuation`1"]
+        MSCIL.TypeReference_Ref (Just cpslibResolutionScope)
+        [MSCIL.stringToDottedName "Continuation`1"]
       )
       [valueType]
 
@@ -85,8 +88,8 @@ thunkBase :: MSCIL.Type -> MSCIL.Type
 thunkBase valueType
   = MSCIL.Type_GenType
       ( MSCIL.Type_Class $
-        MSCIL.TypeReference_Ref (MSCIL.convert "cpslib")
-        [MSCIL.convert "Thunk`1"]
+        MSCIL.TypeReference_Ref (Just cpslibResolutionScope)
+        [MSCIL.stringToDottedName "Thunk`1"]
       )
       [valueType]
 
@@ -97,8 +100,8 @@ functionBase :: MSCIL.Type -> MSCIL.TypeL -> MSCIL.Type
 functionBase returnType argumentTypes
   = MSCIL.Type_GenType
       ( MSCIL.Type_Class $
-        MSCIL.TypeReference_Ref (MSCIL.convert "cpslib")
-        [MSCIL.convert $ "Function`" ++ (show $ (length argumentTypes) + 1)]
+        MSCIL.TypeReference_Ref (Just cpslibResolutionScope)
+        [MSCIL.stringToDottedName $ "Function`" ++ (show $ (length argumentTypes) + 1)]
       )
       (returnType : argumentTypes)
 
@@ -172,58 +175,47 @@ readUndefinedVar (ValueKey name) = ((debugOutputInstrs ("ERROR: Undefined value 
 -- TODO: Instantiate thunk or continuation which will error when invoked.
 readUndefinedVar key = ([MSCIL.instrLdNull, MSCIL.MethodBodyItem_Comment ("Undefined " ++ (show key))], 1)
 
-instance MSCIL.Convertible EnvironmentKey MSCIL.Id where
-  convert (ValueKey (ValueName nm)) = MSCIL.convert $ show nm
-  convert (ThunkKey (ThunkName nm)) = MSCIL.convert $ show nm
-  convert (ContinuationKey (ContName nm)) = MSCIL.convert $ show nm
+keyToId :: EnvironmentKey -> MSCIL.Id
+keyToId (ValueKey (ValueName nm)) = MSCIL.Id_Id ("v_" ++ (show nm))
+keyToId (ThunkKey (ThunkName nm)) = MSCIL.Id_Id ("t_" ++ (show nm))
+keyToId (ContinuationKey (ContName nm)) = MSCIL.Id_Id ("k_" ++ (show nm))
 
-instance MSCIL.Convertible EnvironmentKey MSCIL.DottedName where
-  convert = (:[]) . MSCIL.convert
-
-instance MSCIL.Convertible EnvironmentKey MSCIL.Type where
-  convert (ValueKey _) = MSCIL.Type_Object
-  convert (ThunkKey _) = thunkBase MSCIL.Type_Object
-  convert (ContinuationKey _) = continuationBase MSCIL.Type_Object
-
-instance MSCIL.Convertible EnvironmentKey MSCIL.Param where convert key = MSCIL.convert (key, key)
-
-instance MSCIL.Convertible EnvironmentKey MSCIL.Local where
-  convert key = MSCIL.convert (key, key)
-
-instance MSCIL.Convertible EnvironmentKey MSCIL.FieldDecl where
-  convert key = MSCIL.convert (key, key)
+keyToDottedName :: EnvironmentKey -> MSCIL.DottedName
+keyToDottedName = (:[]) . keyToId
 
 keyToType :: EnvironmentKey -> MSCIL.Type
-keyToType = MSCIL.convert
+keyToType (ValueKey _) = MSCIL.Type_Object
+keyToType (ThunkKey _) = thunkBase MSCIL.Type_Object
+keyToType (ContinuationKey _) = continuationBase MSCIL.Type_Object
 
-keyToIdentifier :: EnvironmentKey -> MSCIL.Id
-keyToIdentifier = MSCIL.convert
-
-keyToLocal :: EnvironmentKey -> MSCIL.Local
-keyToLocal = MSCIL.convert
+keyToNamedParam :: EnvironmentKey -> MSCIL.Param
+keyToNamedParam k = MSCIL.Param_Param [] (keyToType k) (Just (keyToId k))
 
 keyToParam :: EnvironmentKey -> MSCIL.Param
-keyToParam = MSCIL.convert
+keyToParam k = MSCIL.Param_Param [] (keyToType k) Nothing
 
-keyToField :: EnvironmentKey -> MSCIL.ClassMember
-keyToField v = MSCIL.ClassMember_Field (MSCIL.FieldDecl_FieldDecl Nothing [MSCIL.FieldAttr_Private] (keyToType v) (keyToIdentifier v))
+keyToLocal :: EnvironmentKey -> MSCIL.Local
+keyToLocal k = MSCIL.Local_Local (keyToType k) (Just (keyToId k))
+
+keyToFieldDecl :: EnvironmentKey -> MSCIL.FieldDecl
+keyToFieldDecl k = MSCIL.FieldDecl_FieldDecl Nothing [] (keyToType k) (keyToId k)
 
 continuationClassName :: ContName -> MSCIL.Id
-continuationClassName (ContName name) = MSCIL.convert $ "Continuation" ++ (show name)
+continuationClassName (ContName name) = MSCIL.stringToId $ "Continuation" ++ (show name)
 
 thunkClassName :: ThunkName -> MSCIL.Id
-thunkClassName (ThunkName name) = MSCIL.convert $ "Thunk" ++ (show name)
+thunkClassName (ThunkName name) = MSCIL.stringToId $ "Thunk" ++ (show name)
 
 functionClassName :: ValueName -> MSCIL.Id
-functionClassName (ValueName name) = MSCIL.convert $ "Function" ++ (show name)
+functionClassName (ValueName name) = MSCIL.stringToId $ "Function" ++ (show name)
 
 
 tagClassName :: CTag -> Int -> MSCIL.Id
-tagClassName CTagRec arguments = MSCIL.convert $ "Record" ++ (show arguments)
-tagClassName (CTag {ctagTyNm = tyNm, ctagNm = nm }) _ = MSCIL.convert $ (show tyNm) ++ "_" ++ (show nm)
+tagClassName CTagRec arguments = MSCIL.stringToId $ "Record" ++ (show arguments)
+tagClassName (CTag {ctagTyNm = tyNm, ctagNm = nm }) _ = MSCIL.stringToId $ (show tyNm) ++ "_" ++ (show nm)
 
 tagFieldName :: Int -> MSCIL.Id
-tagFieldName n = MSCIL.convert $ "field" ++ (show n)
+tagFieldName n = MSCIL.stringToId $ "field" ++ (show n)
 
 createTagClass :: CTag -> Int -> MSCIL.Decl
 createTagClass tag arguments =
@@ -249,47 +241,47 @@ createTagClass tag arguments =
     classname = tagClassName tag arguments
     argname i = tagFieldName i
     argnames = map argname [1..arguments]
-    argfield i = MSCIL.ClassMember_Field $ MSCIL.fieldDecl (thunkBase MSCIL.Type_Object) (tagFieldName i)
+    argfield i = MSCIL.ClassMember_Field $ MSCIL.FieldDecl_FieldDecl Nothing [] (thunkBase MSCIL.Type_Object) (tagFieldName i)
     argfields = map argfield [1..arguments]
     argparam :: Int -> MSCIL.Param
-    argparam i = MSCIL.param (thunkBase MSCIL.Type_Object) (tagFieldName i)
+    argparam i = MSCIL.Param_Param [] (thunkBase MSCIL.Type_Object) (Just $ tagFieldName i)
     argparams = map argparam [1..arguments]
     storeinstrs = concat $ map storeinstr (zip argnames [1..])
     storeinstr (fieldname, index) =
       [ MSCIL.instrLdArg 0
       , MSCIL.instrLdArg index
-      , MSCIL.instrStFld (thunkBase MSCIL.Type_Object) classname fieldname
+      , MSCIL.instrStFld (thunkBase MSCIL.Type_Object) (MSCIL.idToTypeSpec classname) fieldname
       ]
 
 createTagClasses :: (Set.Set (CTag, Int)) -> MSCIL.DeclL
 createTagClasses s
   = map (\(tag, args) -> createTagClass tag args) $ Set.toList s
 
-systemConsoleRefType :: MSCIL.TypeReference
+systemConsoleRefType :: MSCIL.TypeSpec
 systemConsoleRefType
-  = MSCIL.TypeReference_Ref (Just $ MSCIL.ResolutionScope_AssemblyRefName corlibRefName) [MSCIL.convert ["System", "Console"]]
+  = MSCIL.TypeSpec_Ref $ MSCIL.TypeReference_Ref (Just $ MSCIL.ResolutionScope_AssemblyRefName corlibRefName) [map MSCIL.stringToId ["System", "Console"]]
   where
     corlibRefName :: MSCIL.AssemblyRefName
-    corlibRefName = MSCIL.AssemblyRefName_AssemblyRefName $ MSCIL.convert "corlib"
+    corlibRefName = MSCIL.AssemblyRefName_AssemblyRefName $ MSCIL.stringToDottedName "corlib"
 
 
 debugOutputInstrs :: String -> MSCIL.MethodBodyItemL
 debugOutputInstrs s
   =
     [ MSCIL.instrLdStr s
-    , MSCIL.instrCall () MSCIL.Type_Void systemConsoleRefType "WriteLine" [MSCIL.Type_Object]
+    , MSCIL.instrCall MSCIL.callConvDefault MSCIL.Type_Void (Just $ systemConsoleRefType) (MSCIL.stringToMethodName "WriteLine") [MSCIL.typeToParam MSCIL.Type_Object]
     ]
     
 boxInstr :: Ty -> [MSCIL.MethodBodyItem]
 boxInstr ty =
   if (appMbCon ty == Just hsnInt)
-    then [MSCIL.instrBox MSCIL.Type_NativeInt]
+    then [MSCIL.instrBox (MSCIL.typeToTypeSpec MSCIL.Type_NativeInt)]
     else []
 
 unboxInstr :: Ty -> [MSCIL.MethodBodyItem]
 unboxInstr ty =
   if (appMbCon ty == Just hsnInt)
-    then [MSCIL.instrUnboxAny MSCIL.Type_NativeInt]
+    then [MSCIL.instrUnboxAny (MSCIL.typeToTypeSpec MSCIL.Type_NativeInt)]
     else []
 %%]
 
@@ -326,7 +318,7 @@ ATTR CVal [ env : {Environment} | | ]
 SEM CVal
   | IntVal lhs.instr =
       [ MSCIL.instrLdcI4 @value
-      , MSCIL.instrBox MSCIL.Type_NativeInt
+      , MSCIL.instrBox (MSCIL.typeToTypeSpec MSCIL.Type_NativeInt)
       ]
   | StringVal lhs.instr = [MSCIL.instrLdStr @value]
   | IntVal StringVal lhs.maxstack = 1
@@ -339,22 +331,22 @@ SEM CVal
           ( MSCIL.classHeader
             [MSCIL.ClassAttr_Public, MSCIL.ClassAttr_Auto, MSCIL.ClassAttr_Ansi]
             @loc.classname
-            [MSCIL.Type_Object, functionBase MSCIL.Type_Object [MSCIL.Type_Object]]
+            (map MSCIL.typeToTypeSpec [MSCIL.Type_Object, functionBase MSCIL.Type_Object [MSCIL.Type_Object]])
           )
           (
-            (map keyToField @loc.upvalues)
+            (map (MSCIL.ClassMember_Field . keyToFieldDecl) @loc.upvalues)
             ++
             [ MSCIL.ClassMember_Method
-              ( MSCIL.ctorHeader (map keyToParam @loc.upvalues) )
+              ( MSCIL.ctorHeader (map keyToNamedParam @loc.upvalues) )
               (
                 [  MSCIL.instrLdArg 0
-                , MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void MSCIL.Type_Object MSCIL.MethodName_Ctor ()
+                , MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.typeToTypeSpec MSCIL.Type_Object) MSCIL.MethodName_Ctor []
                 ] ++
                 ( concat $ map
                     (\(upval, index) -> 
                       [ MSCIL.instrLdArg 0
                       , MSCIL.instrLdArg index
-                      , MSCIL.instrStFld upval @loc.classname upval
+                      , MSCIL.instrStFld (keyToType upval) (MSCIL.idToTypeSpec @loc.classname) (keyToId upval)
                       ]
                     )
                     (zip @loc.upvalues [1..])
@@ -364,11 +356,11 @@ SEM CVal
           , MSCIL.ClassMember_Method
               ( MSCIL.methodHeader
                 [MSCIL.MethAttr_Public, MSCIL.MethAttr_Virtual, MSCIL.MethAttr_NewSlot]
-                MSCIL.callConv_Instance
+                (Just MSCIL.callConv_Instance)
                 MSCIL.Type_Void
-                "Apply"
-                [ keyToParam @loc.contkey
-                , keyToParam @loc.thunkkey
+                (MSCIL.stringToMethodName "Apply")
+                [ keyToNamedParam @loc.contkey
+                , keyToNamedParam @loc.thunkkey
                 ]
               )
               ( MSCIL.MethodBodyItem_MaxStack @body.maxstack
@@ -383,11 +375,11 @@ SEM CVal
       Map.fromList $
         (@loc.contkey, Argument 1) :
         (@loc.thunkkey, Argument 2) :
-        (zip @loc.upvalues $ map (\upval -> Field (Argument 0) (MSCIL.convert @loc.classname) (MSCIL.convert upval)) @loc.upvalues)
+        (zip @loc.upvalues $ map (\upval -> Field (Argument 0) (MSCIL.idToTypeSpec @loc.classname) (keyToId upval)) @loc.upvalues)
   | LamVal (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @lhs.env) @loc.upvalues
   | LamVal lhs.instr =
       (concat @loc.upvalueinstr) ++
-      [ MSCIL.instrNewObj MSCIL.callConv_Instance MSCIL.Type_Void @loc.classname MSCIL.MethodName_Ctor @loc.upvalues
+      [ MSCIL.instrNewObj MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.idToTypeSpec @loc.classname) MSCIL.MethodName_Ctor (map keyToParam @loc.upvalues)
       ]
   | LamVal lhs.maxstack = foldr max (length @loc.upvalues) (zipWith (+) @loc.upvaluemaxstack [0..])
 SEM CVal
@@ -396,7 +388,7 @@ SEM CVal
   | TagVal (loc.arginstr, loc.argmaxstack) = unzip $ map (readEnv @lhs.env) @loc.argkey
   | TagVal lhs.instr =
       (concat @loc.arginstr) ++ 
-      [ MSCIL.instrNewObj MSCIL.callConv_Instance MSCIL.Type_Void @loc.classname MSCIL.MethodName_Ctor @loc.argkey
+      [ MSCIL.instrNewObj MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.idToTypeSpec @loc.classname) MSCIL.MethodName_Ctor (map keyToParam @loc.argkey)
       ]
   | TagVal lhs.maxstack = foldr max (length @args) (zipWith (+) @loc.argmaxstack [0..])
   | FFIVal (loc.argsty, loc.retty) = appUnArr @ty
@@ -417,7 +409,7 @@ SEM CVal
 SEM CTm
   | LetCont loc.contkey = asKey @contname
   | LetCont loc.valuekey = asKey @valname
-  | LetCont lhs.locals = (MSCIL.convert @loc.contkey) : @body.locals
+  | LetCont lhs.locals = (keyToLocal @loc.contkey) : @body.locals
   | LetCont loc.target = @lhs.localoffset
   | LetCont lhs.localoffset = @lhs.localoffset + 1
   | LetCont loc.classname = continuationClassName @contname
@@ -427,21 +419,21 @@ SEM CTm
         ( MSCIL.classHeader
           [MSCIL.ClassAttr_Public, MSCIL.ClassAttr_Auto, MSCIL.ClassAttr_Ansi]
           @loc.classname
-          [MSCIL.Type_Object, continuationBase (MSCIL.convert @loc.valuekey)]
+          (map MSCIL.typeToTypeSpec [MSCIL.Type_Object, continuationBase (keyToType @loc.valuekey)])
         )
         (
-          (map (MSCIL.ClassMember_Field . MSCIL.convert) @loc.upvalues) ++
+          (map (MSCIL.ClassMember_Field . keyToFieldDecl) @loc.upvalues) ++
           [ MSCIL.ClassMember_Method
-            ( MSCIL.ctorHeader @loc.upvalues )
+            ( MSCIL.ctorHeader (map keyToNamedParam @loc.upvalues) )
             (
               [  MSCIL.instrLdArg 0
-              , MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void MSCIL.Type_Object MSCIL.MethodName_Ctor ()
+              , MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.typeToTypeSpec MSCIL.Type_Object) MSCIL.MethodName_Ctor []
               ] ++
               ( concat $ map
                   (\(upval, index) -> 
                     [ MSCIL.instrLdArg 0
                     , MSCIL.instrLdArg index
-                    , MSCIL.instrStFld upval @loc.classname upval
+                    , MSCIL.instrStFld (keyToType upval) (MSCIL.idToTypeSpec @loc.classname) (keyToId upval)
                     ]
                   )
                   (zip @loc.upvalues [1..])
@@ -451,10 +443,10 @@ SEM CTm
           , MSCIL.ClassMember_Method
             ( MSCIL.methodHeader
               [MSCIL.MethAttr_Public, MSCIL.MethAttr_Virtual, MSCIL.MethAttr_NewSlot]
-              MSCIL.callConv_Instance
+              (Just MSCIL.callConv_Instance)
               MSCIL.Type_Void
-              "Invoke"
-              [@loc.valuekey]
+              (MSCIL.stringToMethodName "Invoke")
+              [keyToNamedParam @loc.valuekey]
             )
             ( MSCIL.MethodBodyItem_MaxStack @bindbody.maxstack
             : MSCIL.MethodBodyItem_Locals False @bindbody.locals
@@ -466,12 +458,12 @@ SEM CTm
   | LetCont bindbody.env =
       Map.fromList $
         (@loc.valuekey, Argument 1) :
-        (zip @loc.upvalues $ map ((Field (Argument 0) (MSCIL.convert @loc.classname)) . MSCIL.convert) @loc.upvalues)
+        (zip @loc.upvalues $ map ((Field (Argument 0) (MSCIL.idToTypeSpec @loc.classname)) . keyToId) @loc.upvalues)
   | LetCont lhs.classes = @loc.class : (@bindbody.classes ++ @body.classes)
   | LetCont (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @lhs.env) @loc.upvalues
   | LetCont lhs.instr =
       (concat @loc.upvalueinstr) ++
-      [ MSCIL.instrNewObj MSCIL.callConv_Instance MSCIL.Type_Void @loc.classname MSCIL.MethodName_Ctor @loc.upvalues
+      [ MSCIL.instrNewObj MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.idToTypeSpec @loc.classname) MSCIL.MethodName_Ctor (map keyToParam @loc.upvalues)
       , MSCIL.instrStLoc @loc.target
       ] ++
       @body.instr
@@ -482,7 +474,7 @@ SEM CTm
 -- LetThunk
 ----
 SEM CTm
-  | LetThunk lhs.locals = (map MSCIL.convert @binds.locals) ++ @body.locals
+  | LetThunk lhs.locals = (map keyToLocal @binds.locals) ++ @body.locals
   | LetThunk body.env = Map.union (Map.fromList $ zip @binds.locals $ map Local [@lhs.localoffset ..]) @lhs.env
   | LetThunk body.localoffset = @lhs.localoffset + (length @binds.locals)
   | LetThunk lhs.instr = @binds.allocinstr ++ @binds.fixupinstr ++ @body.instr
@@ -518,21 +510,21 @@ SEM CThunkBind
           ( MSCIL.classHeader
             [MSCIL.ClassAttr_Public, MSCIL.ClassAttr_Auto, MSCIL.ClassAttr_Ansi]
             @loc.classname
-            [MSCIL.Type_Object, thunkBase MSCIL.Type_Object]
+            (map MSCIL.typeToTypeSpec [MSCIL.Type_Object, thunkBase MSCIL.Type_Object])
           )
           (
-            map (MSCIL.ClassMember_Field . MSCIL.convert) (@loc.nonrecupvalues ++ @loc.recupvalues) ++
+            map (MSCIL.ClassMember_Field . keyToFieldDecl) (@loc.nonrecupvalues ++ @loc.recupvalues) ++
             [ MSCIL.ClassMember_Method
-              ( MSCIL.ctorHeader @loc.nonrecupvalues )
+              ( MSCIL.ctorHeader (map keyToNamedParam @loc.nonrecupvalues) )
               (
                 [ MSCIL.instrLdArg 0
-                , MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void MSCIL.Type_Object MSCIL.MethodName_Ctor ()
+                , MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.typeToTypeSpec MSCIL.Type_Object) MSCIL.MethodName_Ctor []
                 ] ++
                 ( concat $ map
                     (\(upval, index) -> 
                       [ MSCIL.instrLdArg 0
                       , MSCIL.instrLdArg index
-                      , MSCIL.instrStFld upval @loc.classname upval
+                      , MSCIL.instrStFld (keyToType upval) (MSCIL.idToTypeSpec @loc.classname) (keyToId upval)
                       ]
                     )
                     (zip @loc.nonrecupvalues [1..])
@@ -542,17 +534,17 @@ SEM CThunkBind
           , MSCIL.ClassMember_Method
               ( MSCIL.methodHeader
                 [MSCIL.MethAttr_Public, MSCIL.MethAttr_Family]
-                MSCIL.callConv_Instance
+                (Just MSCIL.callConv_Instance)
                 MSCIL.Type_Void
-                "Fixup"
-                @loc.recupvalues
+                (MSCIL.stringToMethodName "Fixup")
+                (map keyToNamedParam @loc.recupvalues)
               )
               (
                 (concat $ map
                   (\(upval, index) -> 
                     [ MSCIL.instrLdArg 0
                     , MSCIL.instrLdArg index
-                    , MSCIL.instrStFld upval @loc.classname upval
+                    , MSCIL.instrStFld (keyToType upval) (MSCIL.idToTypeSpec @loc.classname) (keyToId upval)
                     ]
                   )
                   (zip @loc.recupvalues [1..])
@@ -562,10 +554,10 @@ SEM CThunkBind
           , MSCIL.ClassMember_Method
               ( MSCIL.methodHeader
                 [MSCIL.MethAttr_Public, MSCIL.MethAttr_Virtual, MSCIL.MethAttr_NewSlot]
-                MSCIL.callConv_Instance
+                (Just MSCIL.callConv_Instance)
                 MSCIL.Type_Void
-                "Evaluate"
-                [@loc.contkey]
+                (MSCIL.stringToMethodName "Evaluate")
+                [keyToNamedParam @loc.contkey]
               )
               ( MSCIL.MethodBodyItem_MaxStack @body.maxstack
               : MSCIL.MethodBodyItem_Locals False @body.locals
@@ -577,7 +569,7 @@ SEM CThunkBind
   | ThunkBind (loc.nonrecupvalinstr, loc.nonrecupvalmaxstack) = unzip $ map (readEnv @lhs.env) @loc.nonrecupvalues
   | ThunkBind lhs.allocinstr = 
       (concat @loc.nonrecupvalinstr) ++
-      [ MSCIL.instrNewObj MSCIL.callConv_Instance MSCIL.Type_Void @loc.classname MSCIL.MethodName_Ctor @loc.nonrecupvalues
+      [ MSCIL.instrNewObj MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.idToTypeSpec @loc.classname) MSCIL.MethodName_Ctor (map keyToParam @loc.nonrecupvalues)
       , MSCIL.instrStLoc @lhs.localoffset
       ]
   | ThunkBind lhs.allocmaxstack = foldr max ((length @loc.nonrecupvalues) + 1) (zipWith (+) @loc.nonrecupvalmaxstack [0..])
@@ -586,7 +578,7 @@ SEM CThunkBind
       Map.fromList $
         (@loc.thunkkey, Argument 0) :
         (@loc.contkey, Argument 1) :
-        (zip @loc.allupvalues $ map ((Field (Argument 0) (MSCIL.convert @loc.classname)) . MSCIL.convert) @loc.allupvalues)
+        (zip @loc.allupvalues $ map ((Field (Argument 0) (MSCIL.idToTypeSpec @loc.classname)) . keyToId) @loc.allupvalues)
 
 ATTR CThunkBind CThunkBindL [ | | fixupinstr USE {++} {[]} : {MSCIL.MethodBodyItemL} fixupmaxstack USE {max} {0} : {Int} ]
 SEM CThunkBind
@@ -594,7 +586,7 @@ SEM CThunkBind
   | ThunkBind lhs.fixupinstr = 
       [ MSCIL.instrLdLoc @lhs.localoffset ] ++
       (concat @loc.recupvalinstr) ++
-      [ MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void @loc.classname "Fixup" @loc.recupvalues ]
+      [ MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.idToTypeSpec @loc.classname) (MSCIL.stringToMethodName "Fixup") (map keyToParam @loc.recupvalues) ]
   | ThunkBind lhs.fixupmaxstack = foldl max ((length @loc.recupvalues) + 1) (zipWith (+) @loc.recupvalmaxstack [1..])
 
 ----
@@ -606,13 +598,13 @@ SEM CTm
   | ContAppl loc.valuekey = asKey @val
   | ContAppl (loc.continstr,loc.contmaxstack) = readEnv @lhs.env @loc.contkey
   | ContAppl (loc.valinstr,loc.valmaxstack) = readEnv @lhs.env @loc.valuekey
-  | ContAppl loc.valuetype = (MSCIL.convert @loc.valuekey) :: MSCIL.Type
+  | ContAppl loc.valuetype = keyToType @loc.valuekey
   | ContAppl loc.owner = continuationBase @loc.valuetype
   | ContAppl loc.params = continuationInvokeParams @loc.valuetype
   | ContAppl lhs.instr =
       @loc.continstr ++ @loc.valinstr ++
       [ MSCIL.instrTail
-      , MSCIL.instrCallVirt MSCIL.callConv_Instance MSCIL.Type_Void @loc.owner "Invoke" @loc.params
+      , MSCIL.instrCallVirt MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.typeToTypeSpec @loc.owner) (MSCIL.stringToMethodName "Invoke") @loc.params
       , MSCIL.instrRet
       ]
   | ContAppl lhs.maxstack =
@@ -629,12 +621,12 @@ SEM CTm
   | ThunkEval loc.contkey = asKey @cont
   | ThunkEval (loc.thunkinstr, loc.thunkmaxstack) = readEnv @lhs.env @loc.thunkkey
   | ThunkEval (loc.continstr, loc.contmaxstack) = readEnv @lhs.env @loc.contkey
-  | ThunkEval loc.owner = (MSCIL.convert @loc.thunkkey) :: MSCIL.Type
+  | ThunkEval loc.owner = keyToType @loc.thunkkey
   | ThunkEval loc.params = thunkEvaluateParams MSCIL.Type_Object
   | ThunkEval lhs.instr =
       @loc.thunkinstr ++ @loc.continstr ++
       [ MSCIL.instrTail
-      , MSCIL.instrCallVirt MSCIL.callConv_Instance MSCIL.Type_Void @loc.owner "Evaluate" @loc.params
+      , MSCIL.instrCallVirt MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.typeToTypeSpec @loc.owner) (MSCIL.stringToMethodName "Evaluate") @loc.params
       , MSCIL.instrRet
       ]
   | ThunkEval lhs.maxstack =
@@ -658,7 +650,7 @@ SEM CTm
   | FuncAppl lhs.instr =
       @loc.funcinstr ++ @loc.continstr ++ @loc.arginstr ++
       [ MSCIL.instrTail
-      , MSCIL.instrCallVirt MSCIL.callConv_Instance MSCIL.Type_Void @loc.owner "Apply" @loc.params
+      , MSCIL.instrCallVirt MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.typeToTypeSpec @loc.owner) (MSCIL.stringToMethodName "Apply") @loc.params
       , MSCIL.instrRet
       ]
   | FuncAppl lhs.maxstack =
@@ -675,7 +667,7 @@ SEM CTm
   | Exit lhs.instr =
       @loc.valinstr ++
       [ MSCIL.instrTail
-      , MSCIL.instrCall MSCIL.CallKind_Default MSCIL.Type_Void systemConsoleRefType "WriteLine" [MSCIL.Type_Object]
+      , MSCIL.instrCall MSCIL.callConvDefault MSCIL.Type_Void (Just systemConsoleRefType) (MSCIL.stringToMethodName "WriteLine") [MSCIL.typeToParam MSCIL.Type_Object]
       , MSCIL.instrRet
       ]
   | Exit lhs.maxstack = max 1 @loc.valmaxstack
@@ -689,8 +681,8 @@ SEM CTm
   | Case loc.valenv = asKey @val
   | Case loc.currentNumber = @lhs.caseNumber
   | Case lhs.caseNumber = @lhs.caseNumber + 1
-  | Case loc.classname = MSCIL.convert $ "CaseSwitch" ++ (show @loc.currentNumber)
-  | Case loc.branchclass = MSCIL.convert @loc.classname
+  | Case loc.classname = MSCIL.stringToId $ "CaseSwitch" ++ (show @loc.currentNumber)
+  | Case loc.branchclass = MSCIL.idToTypeSpec @loc.classname
   | Case branches.index = 0
   | Case lhs.locals = []
 --      if @branches.needlocal
@@ -734,7 +726,7 @@ ATTR CCaseBranch CCaseBranchL [ classname : {MSCIL.Id} index : {Int} | | ]
 SEM CCaseBranchL
   | Cons tl.index = @lhs.index + 1
 SEM CCaseBranch
-  | CaseBranch loc.branchmethod = MSCIL.convert $ "branch" ++ (show @lhs.index)
+  | CaseBranch loc.branchmethod = MSCIL.stringToMethodName $ "branch" ++ (show @lhs.index)
   | CaseBranch loc.upvalues = Set.toList @body.freevars
   | CaseBranch pat.bodyupvalues = @loc.upvalues
   | CaseBranch body.localoffset = 0
@@ -752,7 +744,7 @@ SEM CCaseBranch
           [MSCIL.MethAttr_Public, MSCIL.MethAttr_Static]
           MSCIL.Type_Void
           @loc.branchmethod
-          @loc.upvalues
+          (map keyToNamedParam @loc.upvalues)
         )
         (
           [ MSCIL.MethodBodyItem_MaxStack @body.maxstack
@@ -774,14 +766,14 @@ SEM CCasePattern
   | Default lhs.instr = 
       (concat @loc.upvalueinstr) ++ 
       [ MSCIL.instrTail
-      , MSCIL.instrCall MSCIL.CallKind_Default MSCIL.Type_Void @lhs.branchclass @lhs.branchmethod @lhs.bodyupvalues
+      , MSCIL.instrCall MSCIL.callConvDefault MSCIL.Type_Void (Just @lhs.branchclass) @lhs.branchmethod (map keyToParam @lhs.bodyupvalues)
       , MSCIL.instrRet
       ]
   | Default lhs.finalinstr = []
   | Default lhs.maxstack = foldl max (length @lhs.bodyupvalues) (zipWith (+) @loc.upvaluemaxstack [0..])
   | Tag (loc.valinstr, loc.valmaxstack) = readEnv @lhs.env @lhs.valenv
   | Tag loc.classname = tagClassName @tag $ length @args
-  | Tag loc.label = MSCIL.convert $ "Branch" ++ (show @lhs.index)
+  | Tag loc.label = MSCIL.stringToId $ "Branch" ++ (show @lhs.index)
   | Tag loc.valloc = fromJust $ Map.lookup @lhs.valenv @lhs.env
   | Tag loc.fieldkeys = map asKey @args
   | Tag loc.fieldlocs =
@@ -789,7 +781,7 @@ SEM CCasePattern
         (\index ->
           Field
             @loc.valloc
-            (MSCIL.convert @loc.classname)
+            (MSCIL.idToTypeSpec @loc.classname)
             (tagFieldName index)
         )
         [1..]
@@ -803,14 +795,14 @@ SEM CCasePattern
   | Tag lhs.instr =
       @loc.valinstr
       ++
-      [ MSCIL.instrIsInst @loc.classname
+      [ MSCIL.instrIsInst (MSCIL.idToTypeSpec @loc.classname)
       , MSCIL.instrBrTrue @loc.label
       ]
   | Tag lhs.finalinstr =
       [ MSCIL.MethodBodyItem_Label @loc.label ] ++
       (concat @loc.upvalueinstr) ++
       [ MSCIL.instrTail
-      , MSCIL.instrCall MSCIL.CallKind_Default MSCIL.Type_Void @lhs.branchclass @lhs.branchmethod @lhs.bodyupvalues
+      , MSCIL.instrCall MSCIL.callConvDefault MSCIL.Type_Void (Just @lhs.branchclass) @lhs.branchmethod (map keyToParam @lhs.bodyupvalues)
       , MSCIL.instrRet
       ]
   | Tag lhs.maxstack = foldl max (length @lhs.bodyupvalues) $ @loc.valmaxstack : (zipWith (+) @loc.upvaluemaxstack [0..])
