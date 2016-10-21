@@ -96,6 +96,15 @@ thunkBase valueType
 thunkEvaluateParams :: MSCIL.Type -> MSCIL.ParamL
 thunkEvaluateParams _ = [MSCIL.Param_Param [] (continuationBase $ MSCIL.Type_GenTypeParam 0) Nothing]
 
+cachedThunkBase :: MSCIL.Type -> MSCIL.Type
+cachedThunkBase valueType
+  = MSCIL.Type_GenType
+      ( MSCIL.Type_Class $
+        MSCIL.TypeReference_Ref (Just cpslibResolutionScope)
+        [MSCIL.stringToDottedName "CachedThunk`1"]
+      )
+      [valueType]
+
 functionBase :: MSCIL.Type -> MSCIL.TypeL -> MSCIL.Type
 functionBase returnType argumentTypes
   = MSCIL.Type_GenType
@@ -510,7 +519,7 @@ SEM CThunkBind
           ( MSCIL.classHeader
             [MSCIL.ClassAttr_Public, MSCIL.ClassAttr_Auto, MSCIL.ClassAttr_Ansi]
             @loc.classname
-            (map MSCIL.typeToTypeSpec [MSCIL.Type_Object, thunkBase MSCIL.Type_Object])
+            (map MSCIL.typeToTypeSpec [cachedThunkBase MSCIL.Type_Object])
           )
           (
             map (MSCIL.ClassMember_Field . keyToFieldDecl) (@loc.nonrecupvalues ++ @loc.recupvalues) ++
@@ -518,7 +527,7 @@ SEM CThunkBind
               ( MSCIL.ctorHeader (map keyToNamedParam @loc.nonrecupvalues) )
               (
                 [ MSCIL.instrLdArg 0
-                , MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.typeToTypeSpec MSCIL.Type_Object) MSCIL.MethodName_Ctor []
+                , MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.typeToTypeSpec (cachedThunkBase MSCIL.Type_Object)) MSCIL.MethodName_Ctor []
                 ] ++
                 ( concat $ map
                     (\(upval, index) -> 
@@ -553,17 +562,36 @@ SEM CThunkBind
               )
           , MSCIL.ClassMember_Method
               ( MSCIL.methodHeader
-                [MSCIL.MethAttr_Public, MSCIL.MethAttr_Virtual, MSCIL.MethAttr_NewSlot]
+                [MSCIL.MethAttr_Public, MSCIL.MethAttr_Virtual]
                 (Just MSCIL.callConv_Instance)
                 MSCIL.Type_Void
-                (MSCIL.stringToMethodName "Evaluate")
+                (MSCIL.stringToMethodName "RealEvaluate")
                 [keyToNamedParam @loc.contkey]
               )
               ( MSCIL.MethodBodyItem_MaxStack @body.maxstack
               : MSCIL.MethodBodyItem_Locals False @body.locals
               : @body.instr
               )
-            ]
+          , MSCIL.ClassMember_Method
+              ( MSCIL.methodHeader
+                [MSCIL.MethAttr_Public, MSCIL.MethAttr_Virtual]
+                (Just MSCIL.callConv_Instance)
+                MSCIL.Type_Void
+                (MSCIL.stringToMethodName "Cleanup")
+                ([] :: MSCIL.ParamL)
+              )
+              ( 
+                ( concat $ map
+                  (\upval ->
+                    [ MSCIL.instrLdArg 0
+                    , MSCIL.instrLdNull
+                    , MSCIL.instrStFld (keyToType upval) (MSCIL.idToTypeSpec @loc.classname) (keyToId upval)
+                    ])
+                  (@loc.recupvalues ++ @loc.nonrecupvalues)
+                ) ++
+                [ MSCIL.instrRet ]
+              )
+          ]
           )
       ] ++ @body.classes
   | ThunkBind (loc.nonrecupvalinstr, loc.nonrecupvalmaxstack) = unzip $ map (readEnv @lhs.env) @loc.nonrecupvalues
