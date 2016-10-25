@@ -6,90 +6,92 @@
 %%[(8 core) hs import (Data.Bits)
 %%]
 %%[(8 core) ag
+DERIVING *
+  : Show
 DATA Id
-	| Id
-		value : {String}
+  | Id
+    value : {String}
 TYPE DottedName = [Id]
 TYPE DottedNameL = [DottedName]
 
 DATA Decl
-	| Assembly
-		name : DottedName
-		info : AsmDeclL
-	| AssemblyExtern
-		name : DottedName
-		info : AsmRefDeclL
-	| Class
-		header : ClassHeader
-		members : ClassMemberL
-	| Field
-		decl : FieldDecl
-	| Method
-		header : MethodHeader
-		body : MethodBodyItemL
+  | Assembly
+    name : DottedName
+    info : AsmDeclL
+  | AssemblyExtern
+    name : DottedName
+    info : AsmRefDeclL
+  | Class
+    header : ClassHeader
+    members : ClassMemberL
+  | Field
+    decl : FieldDecl
+  | Method
+    header : MethodHeader
+    body : MethodBodyItemL
 TYPE DeclL = [Decl]
 
 DATA AsmDecl
-	| Ver
-		a : {Int}
-		b : {Int}
-		c : {Int}
-		d : {Int}
-	| HashAlgorithm
-		algo : {Int}
+  | Ver
+    a : {Int}
+    b : {Int}
+    c : {Int}
+    d : {Int}
+  | HashAlgorithm
+    algo : {Int}
 TYPE AsmDeclL = [AsmDecl]
-		
+    
 DATA AsmRefDecl
-	| Ver
-		a : {Int}
-		b : {Int}
-		c : {Int}
-		d : {Int}
-	| PubKeyToken
-		token : {[Int]}
+  | Ver
+    a : {Int}
+    b : {Int}
+    c : {Int}
+    d : {Int}
+  | PubKeyToken
+    token : {[Int]}
 TYPE AsmRefDeclL = [AsmRefDecl]
 
 DATA ClassHeader
-	| ClassHeader
-		attrs : ClassAttrL
-		name : Id
-		extends : TypeSpecL
+  | ClassHeader
+    attrs : ClassAttrL
+    name : Id
+    extends : TypeSpecL
 
 DATA ClassAttr
-	| Abstract
-	| Ansi
-	| Auto
-	| Explicit
-	| Interface
-	| Private
-	| Public
+  | Abstract
+  | Ansi
+  | Auto
+  | Explicit
+  | Interface
+  | Private
+  | Public
 TYPE ClassAttrL = [ClassAttr]
 
 DATA ClassMember
-	| Class
-		header : ClassHeader
-		members : ClassMemberL
-	| Field
-		decl : FieldDecl
-	| Method
-		header : MethodHeader
-		body : MethodBodyItemL
+  | Class
+    header : ClassHeader
+    members : ClassMemberL
+  | Field
+    decl : FieldDecl
+  | Method
+    header : MethodHeader
+    body : MethodBodyItemL
 TYPE ClassMemberL = [ClassMember]
 
 DATA FieldDecl
-	| FieldDecl
-		byteOffset : {Maybe Int}
-		attrs : FieldAttrL
-		ty : Type
-		name : Id
+  | FieldDecl
+    byteOffset : {Maybe Int}
+    attrs : FieldAttrL
+    ty : Type
+    name : Id
 
 DATA FieldAttr
-	| Family
-	| Private
-	| Public
-	| RtSpecialName
-	| SpecialName
-	| Static
+  | Family
+  | Private
+  | Public
+  | RtSpecialName
+  | SpecialName
+  | Static
 TYPE FieldAttrL = [FieldAttr]
 
 DATA Type
@@ -97,202 +99,238 @@ DATA Type
       index : {Int}
   | GenMethodParam
       index : {Int}
-	| Bool
-	| Char
-	| Class
-		ref : TypeReference
+  | Bool
+  | Char
+  | Class
+    ref : TypeReference
   | NativeInt
   | NativeUInt
-	| Object
-	| String
+  | Object
+  | String
   | GenType
       base : Type
       args : TypeL
-	| Void
+  | Void
 TYPE TypeL = [Type]
 
 DATA TypeSpec
-	| External
-		module : DottedName
-	| Ref
-		ref : TypeReference
-	| Type
-		ty : Type
+  | External
+    module : DottedName
+  | Ref
+    ref : TypeReference
+  | Type
+    ty : Type
 TYPE TypeSpecL = [TypeSpec]
 TYPE MbTypeSpec = MAYBE TypeSpec
 
 DATA TypeReference
-	| Ref
-		scope : MbResolutionScope
-		name : DottedNameL
+  | Ref
+    scope : MbResolutionScope
+    name : DottedNameL
 
 DATA ResolutionScope
-	| Module
-		fname : {String}
-	| AssemblyRefName
-		name : AssemblyRefName
+  | Module
+    fname : DottedName
+  | AssemblyRefName
+    name : AssemblyRefName
 TYPE MbResolutionScope = MAYBE ResolutionScope
 DATA AssemblyRefName
-	| AssemblyRefName
-		name : DottedName
+  | AssemblyRefName
+    name : DottedName
 
 DATA MethodHeader
-	| MethodHeader
-		attr : MethAttrL
-		conv : MbCallConv
-		ty : Type
-		name : MethodName
-		params : ParamL
+  | MethodHeader
+    attr : MethAttrL
+    conv : MbCallConv
+    ty : Type
+    name : MethodName
+    params : ParamL
 
 DATA MethodName
-	| Cctor
-	| Ctor
-	| Name
-		name : DottedName
+  | Cctor
+  | Ctor
+  | Name
+    name : DottedName
 DATA Param
-	| Param
-		attrs : ParamAttrL
-		ty : Type
-		id : MbId
+  | Param
+    attrs : ParamAttrL
+    ty : Type
+    id : MbId
 TYPE ParamL = [Param]
 DATA ParamAttr
-	| In
-	| Opt
-	| Out
+  | In
+  | Opt
+  | Out
 TYPE ParamAttrL = [ParamAttr]
 
 DATA MethodBodyItem
-	| EntryPoint
-	| Locals
-		init : {Bool}
-		locals : LocalL
-	| MaxStack
-		size : {Int}
-	| Instr
-		instr : Instruction
-	| Label
-		id : Id
-	| Comment -- Not actually part of MethodBodyItem, but a convenient place to dump some comments
-		data : {String}
+  | EntryPoint
+  | Locals
+    init : {Bool}
+    locals : LocalL
+  | MaxStack
+    size : {Int}
+  | Instr
+    instr : Instruction
+  | Label
+    id : Id
+  | Comment -- Not actually part of MethodBodyItem, but a convenient place to dump some comments
+    data : {String}
   | Raw
     data : {String}
 TYPE MethodBodyItemL = [MethodBodyItem]
 
 DATA Instruction
-	| Ret
-	| LdArg
-		index : {Int}
-	| LdStr
-		value : {String}
-	| LdcI4
-		value : {Int}
-	| LdNull
-	| LdLoc
-		index : {Int}
-	| StLoc
-		index : {Int}
-	| LdFld
-		ty : Type
-		cls : TypeSpec
-		id : Id
-	| StFld
-		ty : Type
-		cls : TypeSpec
-		id : Id
-	| Tail
-	| CallVirt
-		conv : CallConv
-		ret : Type
-		cls : MbTypeSpec
-		name : MethodName
-		params : ParamL
-	| Call
-		conv : CallConv
-		ret : Type
-		cls : MbTypeSpec
-		name : MethodName
-		params : ParamL
-	| NewObj
-		conv : CallConv
-		ret : Type
-		cls : MbTypeSpec
-		name : MethodName
-		params : ParamL
-	| Box
-		cls : TypeSpec
+-- Instructions taking no arguments (VI.C.4.3)
+-- LdArg.n, Ldc.i4.n and such omitted.
+-- Opcodes unlikely to be used omitted.
+  | Add
+  | AddOvf
+  | And
+  | CEq
+  | CGt
+  | CGtUn
+  | CLt
+  | CLtUn
+  | Div
+  | DivUn
+  | Dup
+  | LdNull
+  | Mul
+  | MulOvf
+  | MulOvfUn
+  | Neg
+  | Nop
+  | Not
+  | Or
+  | Pop
+  | Rem
+  | RemUn
+  | Ret
+  | Shl
+  | Shr
+  | ShrUn
+  | Sub
+  | SubOvf
+  | SubOvfUn
+  | Tail
+  | Xor
+-- Instructions that refer to parameters or local variables (VI.C.4.4)
+  | LdArg
+    arg : EIntId
+  | LdArgA
+    arg : EIntId
+  | LdLoc
+    local : EIntId
+  | LdLocA
+    local : EIntId
+  | StArg
+    arg : EIntId
+  | StLoc
+    local : EIntId
+-- Instructions that take a single 32-bit integer argument (VI.C.4.5)
+  | LdcI4
+    value : {Int}
+  | Unaligned
+    alignment : {Int}
+-- Instructions that take a single 64-bit integer argument (VI.C.4.6)
+  | LdcI8
+    value : {Int}
+-- Instructions that take a single floating-point argument (VI.C.4.7)
+  | LdcR4
+    value : {Double}
+  | LdcR8
+    value : {Double}
+-- Branch instructions (VI.C.4.8)
+-- Instructions that are likely not used have been omitted
+  | BrFalse
+    target : EIntId
+  | BrTrue
+    target : EIntId
+  | Br
+    target : EIntId
+-- Instructions that take a method as an argument
+  | Call
+    conv : CallConv
+    ret : Type
+    cls : MbTypeSpec
+    name : MethodName
+    params : ParamL
+  | CallVirt
+    conv : CallConv
+    ret : Type
+    cls : MbTypeSpec
+    name : MethodName
+    params : ParamL
+  | Jmp
+    conv : CallConv
+    ret : Type
+    cls : MbTypeSpec
+    name : MethodName
+    params : ParamL
+  | LdFtn
+    conv : CallConv
+    ret : Type
+    cls : MbTypeSpec
+    name : MethodName
+    params : ParamL
+  | LdVirtFtn
+    conv : CallConv
+    ret : Type
+    cls : MbTypeSpec
+    name : MethodName
+    params : ParamL
+  | NewObj
+    conv : CallConv
+    ret : Type
+    cls : MbTypeSpec
+    name : MethodName
+    params : ParamL
+-- Other
+  | LdStr
+    value : {String}
+  | LdFld
+    ty : Type
+    cls : TypeSpec
+    id : Id
+  | StFld
+    ty : Type
+    cls : TypeSpec
+    id : Id
+  | Box
+    cls : TypeSpec
   | UnboxAny
     cls : TypeSpec
-	| IsInst
-		cls : TypeSpec
-	| Pop
-	| BrFalse
-		label : Id
-	| BrTrue
-		label : Id
+  | IsInst
+    cls : TypeSpec
+TYPE EIntId = EITHER {Int} Id
 
 DATA CallConv
-	| CallConv
-		instance : {Bool}
-		explicit : {Bool}
-		kind : CallKind
+  | CallConv
+    instance : {Bool}
+    explicit : {Bool}
+    kind : CallKind
 TYPE MbCallConv = MAYBE CallConv
 
 DATA CallKind
-	| Default
+  | Default
 
 DATA Local
-	| Local
-		ty : Type
-		id : MbId
+  | Local
+    ty : Type
+    id : MbId
 TYPE MbId = MAYBE Id
 TYPE LocalL = [Local]
 
 DATA MethAttr
-	| Abstract
-	| Family
-	| NewSlot
-	| Private
-	| Public
-	| RtSpecialName
-	| SpecialName
-	| Static
-	| Virtual
+  | Abstract
+  | Family
+  | NewSlot
+  | Private
+  | Public
+  | RtSpecialName
+  | SpecialName
+  | Static
+  | Virtual
 TYPE MethAttrL = [MethAttr]
-		
---- Old
-{-
-DATA Variable
-	| Variable
-		type : Type
-		name : MbVarName
-TYPE MbVarName = MAYBE Id
-TYPE VariableL = [Variable]
-
-DATA Method
-	| Method
-		modifiers : {[String]}
-		returnType : Type
-		name : Id
-		arguments : VariableL
-		instructions : InstructionL
-TYPE MethodL = [Method]
-
-DATA Class
-	| Class
-		modifiers : {[String]}
-		name : Id
-		extends : MbExtends
-		fields : FieldL
-		methods : MethodL
-TYPE ClassL = [Class]
-TYPE MbExtends = MAYBE Id
-
-DATA Field
-	| Field
-		modifiers : {[String]}
-		var : Variable
-TYPE FieldL = [Field]
-
-TYPE InstructionL = [Instruction]
--}
 %%]

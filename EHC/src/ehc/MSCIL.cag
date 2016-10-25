@@ -6,7 +6,7 @@
 %%[(8 core) hs module {%{EH}MSCIL} import()
 %%]
 
-%%[(8 core) hs export (Id(..), DottedName(..), DottedNameL(..), Decl(..), DeclL(..), AsmDecl(..), AsmDeclL(..), AsmRefDecl(..), AsmRefDeclL(..), ClassMember(..), ClassMemberL(..), ClassHeader(..), ClassAttr(..), ClassAttrL(..), FieldDecl(..), FieldAttr(..), FieldAttrL(..), Type(..), TypeL(..), TypeSpec(..), TypeSpecL(..), MbTypeSpec(..), TypeReference(..), ResolutionScope(..), MbResolutionScope(..), AssemblyRefName(..), MethodHeader(..), MethodName(..), Param(..), ParamL(..), ParamAttr(..), ParamAttrL(..), MethodBodyItem(..), MethodBodyItemL(..), Instruction(..), CallConv(..), MbCallConv(..), CallKind(..), Local(..), MbId(..), LocalL(..), MethAttr(..), MethAttrL(..))
+%%[(8 core) hs export (Id(..), DottedName(..), DottedNameL(..), Decl(..), DeclL(..), AsmDecl(..), AsmDeclL(..), AsmRefDecl(..), AsmRefDeclL(..), ClassMember(..), ClassMemberL(..), ClassHeader(..), ClassAttr(..), ClassAttrL(..), FieldDecl(..), FieldAttr(..), FieldAttrL(..), Type(..), TypeL(..), TypeSpec(..), TypeSpecL(..), MbTypeSpec(..), TypeReference(..), ResolutionScope(..), MbResolutionScope(..), AssemblyRefName(..), MethodHeader(..), MethodName(..), Param(..), ParamL(..), ParamAttr(..), ParamAttrL(..), MethodBodyItem(..), MethodBodyItemL(..), Instruction(..), EIntId(..), CallConv(..), MbCallConv(..), CallKind(..), Local(..), MbId(..), LocalL(..), MethAttr(..), MethAttrL(..))
 %%]
 
 %%[(8 core) ag import({MSCIL/AbsSyn})
@@ -84,7 +84,7 @@ instrRet :: MethodBodyItem
 instrRet = MethodBodyItem_Instr Instruction_Ret
 
 instrLdArg :: Int -> MethodBodyItem
-instrLdArg = MethodBodyItem_Instr . Instruction_LdArg
+instrLdArg = MethodBodyItem_Instr . Instruction_LdArg . Left
 
 instrLdStr :: String -> MethodBodyItem
 instrLdStr = MethodBodyItem_Instr . Instruction_LdStr
@@ -96,9 +96,9 @@ instrLdNull :: MethodBodyItem
 instrLdNull = MethodBodyItem_Instr Instruction_LdNull
 
 instrLdLoc :: Int -> MethodBodyItem
-instrLdLoc = MethodBodyItem_Instr . Instruction_LdLoc
+instrLdLoc = (MethodBodyItem_Instr . Instruction_LdLoc) . Left
 instrStLoc :: Int -> MethodBodyItem
-instrStLoc = MethodBodyItem_Instr . Instruction_StLoc
+instrStLoc = (MethodBodyItem_Instr . Instruction_StLoc) . Left
 
 instrLdFld :: Type -> TypeSpec -> Id -> MethodBodyItem
 instrLdFld ty cls i = MethodBodyItem_Instr $ Instruction_LdFld ty cls i
@@ -128,10 +128,10 @@ instrPop :: MethodBodyItem
 instrPop = MethodBodyItem_Instr Instruction_Pop
 
 instrBrFalse :: Id -> MethodBodyItem
-instrBrFalse = MethodBodyItem_Instr . Instruction_BrFalse
+instrBrFalse = MethodBodyItem_Instr . Instruction_BrFalse . Right
 
 instrBrTrue :: Id -> MethodBodyItem
-instrBrTrue  = MethodBodyItem_Instr . Instruction_BrTrue
+instrBrTrue  = MethodBodyItem_Instr . Instruction_BrTrue . Right
 %%]
 
 %%[(8 core) hs export(typeSpec2type, typeClass, callConvDefault)

@@ -177,7 +177,7 @@ SEM TypeReference
 
 ATTR ResolutionScope [ | | pp : {PP_Doc} ]
 SEM ResolutionScope
-  | Module lhs.pp = text "[.module" >#< text @fname >#< text "]"
+  | Module lhs.pp = text "[.module" >#< @fname.pp >#< text "]"
   | AssemblyRefName lhs.pp = ppBrackets @name.pp
 
 ATTR AssemblyRefName [ | | pp : {PP_Doc} ]
@@ -233,26 +233,122 @@ SEM MethodBodyItem
 
 ATTR Instruction [ | | pp : {PP_Doc} ]
 SEM Instruction
-  | Ret lhs.pp = text "ret"
-  | LdArg lhs.pp = text "ldarg" >#< (text $ show @index)
-  | LdStr lhs.pp = text "ldstr" >#< (text $ show @value)
-  | LdcI4 lhs.pp = text "ldc.i4" >#< (text $ show @value)
+  | Add lhs.pp = text "add"
+  | AddOvf lhs.pp = text "add.ovf"
+  | And lhs.pp = text "and"
+  | CEq lhs.pp = text "ceq"
+  | CGt lhs.pp = text "cgt"
+  | CGtUn lhs.pp = text "cgt.un"
+  | CLt lhs.pp = text "clt"
+  | CLtUn lhs.pp = text "clt.un"
+  | Div lhs.pp = text "div"
+  | DivUn lhs.pp = text "div.un"
+  | Dup lhs.pp = text "dup"
   | LdNull lhs.pp = text "ldnull"
-  | LdLoc lhs.pp = text "ldloc" >#< (text $ show @index)
-  | StLoc lhs.pp = text "stloc" >#< (text $ show @index)
+  | Mul lhs.pp = text "mul"
+  | MulOvf lhs.pp = text "mul.ovf"
+  | MulOvfUn lhs.pp = text "mul.ovf.un"
+  | Neg lhs.pp = text "neg"
+  | Nop lhs.pp = text "nop"
+  | Not lhs.pp = text "not"
+  | Or lhs.pp = text "or"
+  | Pop lhs.pp = text "pop"
+  | Rem lhs.pp = text "rem"
+  | RemUn lhs.pp = text "rem.un"
+  | Ret lhs.pp = text "ret"
+  | Shl lhs.pp = text "shl"
+  | Shr lhs.pp = text "shr"
+  | ShrUn lhs.pp = text "shr.un"
+  | Sub lhs.pp = text "sub"
+  | SubOvf lhs.pp = text "sub.ovf"
+  | SubOvfUn lhs.pp = text "sub.ovf.un"
+  | Tail lhs.pp = text "tail."
+  | Xor lhs.pp = text "xor"
+  | LdArg LdArgA LdLoc LdLocA StArg StLoc loc.shortmin = 0
+  | LdArg LdArgA LdLoc LdLocA StArg StLoc loc.shortmax = 255
+  | LdArg LdArgA LdLoc LdLocA StArg StLoc loc.staticmin = 0
+  | LdArg LdArgA LdLoc LdLocA StArg StLoc loc.staticmax = 3
+  | LdArg lhs.pp =
+      case @arg.shortpp of
+        Just short -> text "ldarg" >|< @arg.shortpp
+        Nothing -> text "ldarg" >#< @arg.pp
+  | LdArgA lhs.pp =
+      case @arg.shortpp of
+        Just short -> text "ldarga" >|< @arg.shortpp
+        Nothing -> text "ldarga" >#< @arg.pp
+  | LdLoc lhs.pp =
+      case @local.shortpp of
+        Just short -> text "ldloc" >|< @local.shortpp
+        Nothing -> text "ldloc" >#< @local.pp
+  | LdLocA lhs.pp =
+      case @local.shortpp of
+        Just short -> text "ldloca" >|< @local.shortpp
+        Nothing -> text "ldloca" >#< @local.pp
+  | StArg lhs.pp =
+      case @arg.shortpp of
+        Just short -> text "starg" >|< @arg.shortpp
+        Nothing -> text "starg" >#< @arg.pp
+  | StLoc lhs.pp =
+      case @local.shortpp of
+        Just short -> text "stloc" >|< @local.shortpp
+        Nothing -> text "stloc" >#< @local.pp
+  | LdcI4 lhs.pp =
+      if (@value >= 0 && @value<=8)
+        then text "ldc.i4." >|< (text $ show @value)
+        else
+          if (@value == -1)
+            then text "ldc.i4.m1"
+            else
+              if (@value >= -127 && @value <= 127)
+                then text "ldc.i4.s"
+                else text "ldc.i4"
+              >#< (text $ show @value)
+  | Unaligned lhs.pp = text ".unaligned" >#< (text $ show @alignment)
+  | LdcI8 lhs.pp = text "ldc.i8" >#< (text $ show @value)
+  | LdcR4 lhs.pp = text "ldc.r4" >#< (text $ show @value)
+  | LdcR8 lhs.pp = text "ldc.r8" >#< (text $ show @value)
+  | BrFalse BrTrue Br loc.shortmin = -127
+  | BrFalse BrTrue Br loc.shortmax = 127
+  | BrFalse BrTrue Br loc.staticmin = 0
+  | BrFalse BrTrue Br loc.staticmax = -1
+  | BrFalse BrTrue Br lhs.pp =
+      case @target.shortpp of
+        Just short -> @loc.mypp >|< @target.shortpp
+        Nothing -> @loc.mypp >#< @target.pp
+  | BrFalse loc.mypp = text "brfalse"
+  | BrTrue loc.mypp = text "brtrue"
+  | Br loc.mypp = text "br"
+  | Call CallVirt Jmp LdFtn LdVirtFtn NewObj loc.prefixcls =
+      maybe id (\x y -> x >|< text "::" >|< y) @cls.pp
+  | Call CallVirt Jmp LdFtn LdVirtFtn NewObj lhs.pp =
+      @loc.mypp >#< @conv.pp >#< @ret.pp >#< @loc.prefixcls @name.pp >|< ppParensCommas' @params.pp
+  | Call loc.mypp = text "call"
+  | CallVirt loc.mypp = text "callvirt"
+  | Jmp loc.mypp = text "jmp"
+  | LdFtn loc.mypp = text "ldftn"
+  | LdVirtFtn loc.mypp = text "ldvirtftn"
+  | NewObj loc.mypp = text "newobj"
+  | LdStr lhs.pp = text "ldstr" >#< (text $ show @value)
   | LdFld lhs.pp = text "ldfld" >#< @ty.pp >#< @cls.pp >|< text "::" >|< @id.pp
   | StFld lhs.pp = text "stfld" >#< @ty.pp >#< @cls.pp >|< text "::" >|< @id.pp
-  | Tail lhs.pp = text "tail."
-  | CallVirt Call NewObj loc.prefixcls = maybe id (\x y -> x >|< text "::" >|< y) @cls.pp
-  | CallVirt lhs.pp = text "callvirt" >#< @conv.pp >#< @ret.pp >#< @loc.prefixcls @name.pp >|< ppParensCommas' @params.pp
-  | Call lhs.pp = text "call" >#< @conv.pp >#< @ret.pp >#< @loc.prefixcls @name.pp >|< ppParensCommas' @params.pp
-  | NewObj lhs.pp = text "newobj" >#< @conv.pp >#< @ret.pp >#< @loc.prefixcls @name.pp >|< ppParensCommas' @params.pp
   | Box lhs.pp = text "box" >#< @cls.pp
   | UnboxAny lhs.pp = text "unbox.any" >#< @cls.pp
   | IsInst lhs.pp = text "isinst" >#< @cls.pp
-  | Pop lhs.pp = text "pop"
-  | BrFalse lhs.pp = text "brfalse" >#< @label.pp
-  | BrTrue lhs.pp = text "brtrue" >#< @label.pp
+
+ATTR EIntId [ shortmin : {Int} shortmax : {Int} | | ]
+ATTR EIntId [ staticmin : {Int} staticmax : {Int} | | ]
+ATTR EIntId [ | | pp : {PP_Doc} shortpp : {Maybe PP_Doc} ]
+SEM EIntId
+  | Left lhs.pp = text (show @left)
+  | Left lhs.shortpp =
+      if @left >= @lhs.staticmin && @left <= @lhs.staticmax
+        then (Just (text "." >|< (text $ show @left)))
+        else
+          if @left >= @lhs.shortmin && @left <= @lhs.shortmax
+            then (Just (text ".s" >#< (text $ show @left)))
+            else Nothing
+  | Right lhs.pp = @right.pp
+  | Right lhs.shortpp = Nothing
 
 ATTR CallConv [ | | pp : {PP_Doc} ]
 SEM CallConv
@@ -282,89 +378,4 @@ SEM MethAttr
   | SpecialName lhs.pp = text "specialname"
   | Static lhs.pp = text "static"
   | Virtual lhs.pp = text "virtual"
-
-
-{- OLD OLD OLD -}
-{-
-
-ATTR Type [ | | pp : {PP_Doc} ]
-SEM Type
-  | Void lhs.pp = text "void"
-  | Object lhs.pp = text "object"
-  | String lhs.pp = text "string"
-  | Class lhs.pp = @name.pp
-
-ATTR Variable VariableL [ | | pp : {PP_Doc} ]
-ATTR VariableL [ | | emptypp : {Bool} ]
-SEM VariableL
-  | Nil lhs.emptypp = True
-  | Nil lhs.pp = empty
-  | Cons lhs.emptypp = False
-  | Cons lhs.pp =
-      case @tl.emptypp of
-        True -> @hd.pp
-        False -> @hd.pp >|< text "," >#< @tl.pp
-
-SEM Variable
-  | Variable lhs.pp = @type.pp >|< @name.pp
-
-ATTR Method MethodL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
-SEM Method
-  | Method lhs.pp =
-      text ".method" >#<
-        (ppSpaces $ map text @modifiers) >#<
-        @returnType.pp >#<
-        @name.pp >|<
-        ppParens @arguments.pp >-<
-      text "{" >-<
-        indent 2 @instructions.pp >-<
-      text "}"
-
-ATTR Class ClassL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
-SEM Class
-  | Class lhs.pp =
-      text ".class" >#< (ppSpaces $ map text @modifiers) >#< @name.pp >|< @extends.pp >-<
-      text "{" >-<
-        indent 2 (@fields.pp >-< @methods.pp) >-<
-      text "}"
-
-ATTR Field FieldL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
-SEM Field
-  | Field lhs.pp = 
-      text ".field" >#< (ppSpaces $ map text @modifiers) >#< @var.pp
-
-ATTR FieldDecl [ | | pp : {PP_Doc} ]
-SEM FieldDecl
-  | FieldDecl lhs.pp = TODO
-
-ATTR InstructionL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
-ATTR Instruction [ | | pp : {PP_Doc} ]
-SEM Instruction
-  | PseudoEntryPoint lhs.pp = text ".entrypoint"
-  | PseudoMaxStack lhs.pp = text ".maxstack" >#< (text $ show @size)
-  | PseudoLocals lhs.pp = ".locals init" >#< ppParens @locals.pp
-  | Label lhs.pp = (text @label) >|< text ":"
-  | Comment lhs.pp = text "//" >#< text @data
-  | Ret lhs.pp = text "ret"
-  | LdArg lhs.pp = text "ldarg" >#< show @index
-  | LdStr lhs.pp = text "ldstr" >#< text "\"" >|< text @value >|< text "\""
-  | LdcI4 lhs.pp = text "ldc.i4" >#< show @value
-  | LdNull lhs.pp = text "ldnull"
-  | LdLoc lhs.pp =
-      if @index < 4
-        then text "ldloc." >|< (text $ show @index)
-        else text "ldloc" >#< (text $ show @index)
-  | StLoc lhs.pp = text "stloc" >#< show @index
-  | LdFld lhs.pp = text "ldfld" >#< @var.pp
-  | StFld lhs.pp = text "stfld" >#< @var.pp
-  | Tail lhs.pp = text "tail."
-  | CallVirt lhs.pp = text "callvirt" >#< (ppSpaces $ map text @modifiers) >#< @return.pp >#< @name.pp >|< ppParens @arguments.pp
-  | Call lhs.pp = text "call" >#< (ppSpaces $ map text @modifiers) >#< @return.pp >#< @name.pp >|< ppParens @arguments.pp
-  | NewObj lhs.pp = text "newobj" >#< (ppSpaces $ map text @modifiers) >#< @return.pp >#< @name.pp >|< ppParens @arguments.pp
-  | Box lhs.pp = text "box" >#< @name.pp
-  | IsInst lhs.pp = text "isinst" >#< @class.pp
-  | Pop lhs.pp = text "pop"
-  | BrFalse lhs.pp = text "brfalse" >#< (text @label)
-  | BrTrue lhs.pp = text "brtrue" >#< (text @label)
--}
 %%]
