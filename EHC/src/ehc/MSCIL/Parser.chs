@@ -230,12 +230,54 @@ pInstructionMethod =
   <*> pMethodName
   <*> pParamL
 
+pInstructionField :: CILParser Instruction
+pInstructionField =
+  (
+    (Instruction_LdFld <$ pKeyword "ldfld") <|>
+    (Instruction_LdFldA <$ pKeyword "ldflda") <|>
+    (Instruction_LdsFld <$ pKeyword "ldsfld") <|>
+    (Instruction_LdsFldA <$ pKeyword "ldsflda") <|>
+    (Instruction_StFld <$ pKeyword "stfld") <|>
+    (Instruction_StsFld <$ pKeyword "stsfld")
+  )
+  <*> pType
+  <*> pTypeSpec
+  <* pPunc "::"
+  <*> pId
+
+pInstructionType :: CILParser Instruction
+pInstructionType =
+  (
+    pAny (\(i,k) -> i <$ pKeyword k)
+      [ (Instruction_Box, "box")
+      , (Instruction_CastClass, "castclass")
+      , (Instruction_CpObj, "cpobj")
+      , (Instruction_InitObj, "initobj")
+      , (Instruction_IsInst, "isinst")
+      , (Instruction_LdElemA, "ldelema")
+      , (Instruction_LdObj, "ldobj")
+      , (Instruction_MkRefAny, "mkrefany")
+      , (Instruction_NewArr, "newarr")
+      , (Instruction_RefAnyVal, "refanyval")
+      , (Instruction_SizeOf, "sizeof")
+      , (Instruction_StObj, "stobj")
+      , (Instruction_Unbox, "unbox")
+      , (Instruction_UnboxAny, "unbox.any")
+      ]
+  ) <*> pTypeSpec
+
+pInstructionString :: CILParser Instruction
+pInstructionString =
+  (Instruction_LdStr <$ pKeyword "ldstr") <*> pQSTRING
+
 pInstruction :: CILParser Instruction
 pInstruction =
   pInstructionNoOp <|>
   pInstructionParamLocal <|>
   pInstructionSingleInt <|>
   pInstructionSingleFloat <|>
-  pInstructionBranch
+  pInstructionBranch <|>
+  pInstructionField <|>
+  pInstructionString
 
 %%]

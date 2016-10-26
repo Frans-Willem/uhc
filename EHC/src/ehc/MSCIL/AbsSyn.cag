@@ -181,7 +181,7 @@ DATA MethodBodyItem
 TYPE MethodBodyItemL = [MethodBodyItem]
 
 DATA Instruction
--- Instructions taking no arguments (VI.C.4.3)
+-- Instructions taking no arguments (VI.C.4.2)
 -- LdArg.n, Ldc.i4.n and such omitted.
 -- Opcodes unlikely to be used omitted.
   | Add
@@ -215,7 +215,7 @@ DATA Instruction
   | SubOvfUn
   | Tail
   | Xor
--- Instructions that refer to parameters or local variables (VI.C.4.4)
+-- Instructions that refer to parameters or local variables (VI.C.4.3)
   | LdArg
     arg : EIntId
   | LdArgA
@@ -228,20 +228,20 @@ DATA Instruction
     arg : EIntId
   | StLoc
     local : EIntId
--- Instructions that take a single 32-bit integer argument (VI.C.4.5)
+-- Instructions that take a single 32-bit integer argument (VI.C.4.4)
   | LdcI4
     value : {Int}
   | Unaligned
     alignment : {Int}
--- Instructions that take a single 64-bit integer argument (VI.C.4.6)
+-- Instructions that take a single 64-bit integer argument (VI.C.4.5)
   | LdcI8
     value : {Int}
--- Instructions that take a single floating-point argument (VI.C.4.7)
+-- Instructions that take a single floating-point argument (VI.C.4.6)
   | LdcR4
     value : {Double}
   | LdcR8
     value : {Double}
--- Branch instructions (VI.C.4.8)
+-- Branch instructions (VI.C.4.7)
 -- Instructions that are likely not used have been omitted
   | BrFalse
     target : EIntId
@@ -249,7 +249,7 @@ DATA Instruction
     target : EIntId
   | Br
     target : EIntId
--- Instructions that take a method as an argument
+-- Instructions that take a method as an argument (VI.C.4.8)
   | Call
     conv : CallConv
     ret : Type
@@ -286,10 +286,20 @@ DATA Instruction
     cls : MbTypeSpec
     name : MethodName
     params : ParamL
--- Other
-  | LdStr
-    value : {String}
+-- Instructions that take a field of a class as an argument (VI.C.4.9)
   | LdFld
+    ty : Type
+    cls : TypeSpec
+    id : Id
+  | LdFldA
+    ty : Type
+    cls : TypeSpec
+    id : Id
+  | LdsFld
+    ty : Type
+    cls : TypeSpec
+    id : Id
+  | LdsFldA
     ty : Type
     cls : TypeSpec
     id : Id
@@ -297,12 +307,42 @@ DATA Instruction
     ty : Type
     cls : TypeSpec
     id : Id
+  | StsFld
+    ty : Type
+    cls : TypeSpec
+    id : Id
+-- Instructions that take a type as an argument (VI.C.4.10)
   | Box
     cls : TypeSpec
-  | UnboxAny
+  | CastClass
+    cls : TypeSpec
+  | CpObj
+    cls : TypeSpec
+  | InitObj
     cls : TypeSpec
   | IsInst
     cls : TypeSpec
+  | LdElemA
+    cls : TypeSpec
+  | LdObj
+    cls : TypeSpec
+  | MkRefAny
+    cls : TypeSpec
+  | NewArr
+    cls : TypeSpec
+  | RefAnyVal
+    cls : TypeSpec
+  | SizeOf
+    cls : TypeSpec
+  | StObj
+    cls : TypeSpec
+  | Unbox
+    cls : TypeSpec
+  | UnboxAny
+    cls : TypeSpec
+-- Instructions that take a string as an argument (VI.C.4.11)
+  | LdStr
+    value : {String}
 TYPE EIntId = EITHER {Int} Id
 
 DATA CallConv

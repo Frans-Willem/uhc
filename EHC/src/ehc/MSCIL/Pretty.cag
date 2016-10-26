@@ -328,12 +328,29 @@ SEM Instruction
   | LdFtn loc.mypp = text "ldftn"
   | LdVirtFtn loc.mypp = text "ldvirtftn"
   | NewObj loc.mypp = text "newobj"
+  | LdFld LdFldA LdsFld LdsFldA StFld StsFld lhs.pp = @loc.mypp >#< @ty.pp >#< @cls.pp >|< text "::" >|< @id.pp
+  | LdFld loc.mypp = text "ldfld"
+  | LdFldA loc.mypp = text "ldflda"
+  | LdsFld loc.mypp = text "ldsfld"
+  | LdsFldA loc.mypp = text "ldsflda"
+  | StFld loc.mypp = text "stfld"
+  | StsFld loc.mypp = text "stsfld"
+  | Box CastClass CpObj InitObj IsInst LdElemA LdObj MkRefAny NewArr RefAnyVal SizeOf StObj Unbox UnboxAny lhs.pp = @loc.mypp >#< @cls.pp
+  | Box loc.mypp = text "box"
+  | CastClass loc.mypp = text "castclass"
+  | CpObj loc.mypp = text "cpobj"
+  | InitObj loc.mypp = text "initobj"
+  | IsInst loc.mypp = text "isinst"
+  | LdElemA loc.mypp = text "ldelema"
+  | LdObj loc.mypp = text "ldobj"
+  | MkRefAny loc.mypp = text "mkrefany"
+  | NewArr loc.mypp = text "newarr"
+  | RefAnyVal loc.mypp = text "refanyval"
+  | SizeOf loc.mypp = text "sizeof"
+  | StObj loc.mypp = text "stobj"
+  | Unbox loc.mypp = text "unbox"
+  | UnboxAny loc.mypp = text "unbox.any"
   | LdStr lhs.pp = text "ldstr" >#< (text $ show @value)
-  | LdFld lhs.pp = text "ldfld" >#< @ty.pp >#< @cls.pp >|< text "::" >|< @id.pp
-  | StFld lhs.pp = text "stfld" >#< @ty.pp >#< @cls.pp >|< text "::" >|< @id.pp
-  | Box lhs.pp = text "box" >#< @cls.pp
-  | UnboxAny lhs.pp = text "unbox.any" >#< @cls.pp
-  | IsInst lhs.pp = text "isinst" >#< @cls.pp
 
 ATTR EIntId [ shortmin : {Int} shortmax : {Int} | | ]
 ATTR EIntId [ staticmin : {Int} staticmax : {Int} | | ]
