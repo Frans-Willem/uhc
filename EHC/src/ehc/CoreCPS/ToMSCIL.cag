@@ -708,7 +708,7 @@ ATTR CTm CVal CCaseBranch CCaseBranchL CThunkBind CThunkBindL [ | caseNumber : {
 SEM CTm
   | Case loc.valenv = asKey @val
   | Case loc.currentNumber = @lhs.caseNumber
-  | Case lhs.caseNumber = @lhs.caseNumber + 1
+  | Case branches.caseNumber = @lhs.caseNumber + 1
   | Case loc.classname = MSCIL.stringToId $ "CaseSwitch" ++ (show @loc.currentNumber)
   | Case loc.branchclass = MSCIL.idToTypeSpec @loc.classname
   | Case branches.index = 0
