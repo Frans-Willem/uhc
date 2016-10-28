@@ -6,7 +6,7 @@
 %%[(8 core) hs module {%{EH}MSCIL} import()
 %%]
 
-%%[(8 core) hs export (Id(..), DottedName(..), DottedNameL(..), Decl(..), DeclL(..), AsmDecl(..), AsmDeclL(..), AsmRefDecl(..), AsmRefDeclL(..), ClassMember(..), ClassMemberL(..), ClassHeader(..), ClassAttr(..), ClassAttrL(..), FieldDecl(..), FieldAttr(..), FieldAttrL(..), Type(..), TypeL(..), TypeSpec(..), TypeSpecL(..), MbTypeSpec(..), TypeReference(..), ResolutionScope(..), MbResolutionScope(..), AssemblyRefName(..), MethodHeader(..), MethodName(..), Param(..), ParamL(..), ParamAttr(..), ParamAttrL(..), MethodBodyItem(..), MethodBodyItemL(..), Instruction(..), EIntId(..), CallConv(..), MbCallConv(..), CallKind(..), Local(..), MbId(..), LocalL(..), MethAttr(..), MethAttrL(..))
+%%[(8 core) hs export (Id(..), DottedName(..), DottedNameL(..), Decl(..), DeclL(..), AsmDecl(..), AsmDeclL(..), AsmRefDecl(..), AsmRefDeclL(..), ClassMember(..), ClassMemberL(..), ClassHeader(..), ClassAttr(..), ClassAttrL(..), FieldDecl(..), FieldAttr(..), FieldAttrL(..), Type(..), TypeL(..), Bound(..), BoundL(..), TypeSpec(..), TypeSpecL(..), MbTypeSpec(..), TypeReference(..), ResolutionScope(..), MbResolutionScope(..), AssemblyRefName(..), MethodHeader(..), MethodName(..), Param(..), ParamL(..), ParamAttr(..), ParamAttrL(..), MethodBodyItem(..), MethodBodyItemL(..), Instruction(..), EIntId(..), CallConv(..), MbCallConv(..), CallKind(..), Local(..), MbId(..), LocalL(..), MethAttr(..), MethAttrL(..))
 %%]
 
 %%[(8 core) ag import({MSCIL/AbsSyn})
@@ -78,7 +78,7 @@ instance CreateClassHeader (ClassAttrL -> Id -> TypeSpecL -> ClassHeader) where
     ClassHeader_ClassHeader
 %%]
 
-%%[(8 core) hs export(instrRet, instrLdArg, instrLdStr, instrLdcI4, instrLdNull, instrLdLoc, instrStLoc, instrLdFld, instrStFld, instrTail, instrCall, instrCallVirt, instrNewObj, instrBox, instrUnboxAny, instrIsInst, instrPop, instrBrFalse, instrBrTrue)
+%%[(8 core) hs export(instrRet, instrLdArg, instrLdStr, instrLdcI4, instrLdNull, instrLdLoc, instrStLoc, instrLdFld, instrStFld, instrTail, instrCall, instrCallVirt, instrNewObj, instrBox, instrUnboxAny, instrIsInst, instrPop, instrBeq, instrBrFalse, instrBrTrue)
 
 instrRet :: MethodBodyItem
 instrRet = MethodBodyItem_Instr Instruction_Ret
@@ -127,6 +127,8 @@ instrIsInst = MethodBodyItem_Instr . Instruction_IsInst
 instrPop :: MethodBodyItem
 instrPop = MethodBodyItem_Instr Instruction_Pop
 
+instrBeq :: Id -> MethodBodyItem
+instrBeq = MethodBodyItem_Instr . Instruction_Beq . Right
 instrBrFalse :: Id -> MethodBodyItem
 instrBrFalse = MethodBodyItem_Instr . Instruction_BrFalse . Right
 

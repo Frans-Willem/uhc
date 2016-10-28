@@ -151,12 +151,38 @@ SEM Type
   | Bool lhs.pp = text "bool"
   | Char lhs.pp = text "char"
   | Class lhs.pp = text "class" >#< @ref.pp
+  | Float32 lhs.pp = text "float32"
+  | Float64 lhs.pp = text "float64"
+  | Int8 lhs.pp = text "int8"
+  | Int16 lhs.pp = text "int16"
+  | Int32 lhs.pp = text "int32"
+  | Int64 lhs.pp = text "int64"
+  | Method lhs.pp = text "method" >#< @cc.pp >#< @ty.pp >|< text "*" >|< ppListSep "(" ")" ", " @params.pp
   | NativeInt lhs.pp = text "native int"
   | NativeUInt lhs.pp = text "native unsigned int"
   | Object lhs.pp = text "object"
   | String lhs.pp = text "string"
+  | ManagedPtr lhs.pp = @ty.pp >|< text "&"
+  | UnmanagedPtr lhs.pp = @ty.pp >|< text "*"
   | GenType lhs.pp = @base.pp >|< ppListSep "<" ">" ", " @args.pp
+  | Array lhs.pp = @base.pp >|< ppListSep "[" "]" ", " @bounds.pp
+  | ModOpt lhs.pp = @ty.pp >#< text "modopt(" >|< @ref.pp >|< text ")"
+  | ModReq lhs.pp = @ty.pp >#< text "modreq(" >|< @ref.pp >|< text ")"
+  | Pinned lhs.pp = @ty.pp >#< text "pinned"
+  | TypedRef lhs.pp = text "typedref"
+  | Valuetype lhs.pp = text "valuetype" >#< @ref.pp
+  | UInt8 lhs.pp = text "unsigned int8"
+  | UInt16 lhs.pp = text "unsigned int16"
+  | UInt32 lhs.pp = text "unsigned int32"
   | Void lhs.pp = text "void"
+
+ATTR Bound [ | | pp : {PP_Doc} ]
+ATTR BoundL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
+SEM Bound
+  | Unspecified lhs.pp = text "..."
+  | ZeroTo lhs.pp = text $ show @upper
+  | From lhs.pp = (text $ show @lower) >#< text "..."
+  | Range lhs.pp = (text $ show @lower) >#< text "..." >#< (text $ show @upper)
 
 ATTR TypeSpec [ | | pp : {PP_Doc} ]
 ATTR TypeSpecL [ | | pp USE {:} {[]} : {[PP_Doc]} ]
@@ -241,6 +267,24 @@ SEM Instruction
   | CGtUn lhs.pp = text "cgt.un"
   | CLt lhs.pp = text "clt"
   | CLtUn lhs.pp = text "clt.un"
+  | ConvI1 ConvI2 ConvI4 ConvI8 ConvR4 ConvR8 ConvU1 ConvU2 ConvU4 ConvU8 ConvI ConvU ConvRUn ConvOvfI1 ConvOvfI2 ConvOvfI4 ConvOvfI8 ConvOvfU1 ConvOvfU2 ConvOvfU4 ConvOvfU8 ConvOvfI ConvOvfU ConvOvfI1Un ConvOvfI2Un ConvOvfI4Un ConvOvfI8Un ConvOvfU1Un ConvOvfU2Un ConvOvfU4Un ConvOvfU8Un ConvOvfIUn ConvOvfUUn lhs.pp = text "conv" >|< (if @loc.ovf then text ".ovf" else empty) >|< text "." >|< @loc.typp >|< (if @loc.un then text ".un" else empty)
+  | ConvI1 ConvI2 ConvI4 ConvI8 ConvR4 ConvR8 ConvU1 ConvU2 ConvU4 ConvU8 ConvI ConvU ConvRUn loc.ovf = False
+  | ConvOvfI1 ConvOvfI2 ConvOvfI4 ConvOvfI8 ConvOvfU1 ConvOvfU2 ConvOvfU4 ConvOvfU8 ConvOvfI ConvOvfU ConvOvfI1Un ConvOvfI2Un ConvOvfI4Un ConvOvfI8Un ConvOvfU1Un ConvOvfU2Un ConvOvfU4Un ConvOvfU8Un ConvOvfIUn ConvOvfUUn loc.ovf = True
+  | ConvI1 ConvI2 ConvI4 ConvI8 ConvR4 ConvR8 ConvU1 ConvU2 ConvU4 ConvU8 ConvI ConvU ConvOvfI1 ConvOvfI2 ConvOvfI4 ConvOvfI8 ConvOvfU1 ConvOvfU2 ConvOvfU4 ConvOvfU8 ConvOvfI ConvOvfU loc.un = False
+  | ConvRUn ConvOvfI1Un ConvOvfI2Un ConvOvfI4Un ConvOvfI8Un ConvOvfU1Un ConvOvfU2Un ConvOvfU4Un ConvOvfU8Un ConvOvfIUn ConvOvfUUn loc.un = True
+  | ConvI1 ConvOvfI1 ConvOvfI1Un loc.typp = text "i1"
+  | ConvI2 ConvOvfI2 ConvOvfI2Un loc.typp = text "i2"
+  | ConvI4 ConvOvfI4 ConvOvfI4Un loc.typp = text "i4"
+  | ConvI8 ConvOvfI8 ConvOvfI8Un loc.typp = text "i8"
+  | ConvU1 ConvOvfU1 ConvOvfU1Un loc.typp = text "u1"
+  | ConvU2 ConvOvfU2 ConvOvfU2Un loc.typp = text "u2"
+  | ConvU4 ConvOvfU4 ConvOvfU4Un loc.typp = text "u4"
+  | ConvU8 ConvOvfU8 ConvOvfU8Un loc.typp = text "u8"
+  | ConvI ConvOvfI ConvOvfIUn loc.typp = text "i"
+  | ConvU ConvOvfU ConvOvfUUn loc.typp = text "u"
+  | ConvRUn loc.typp = text "r"
+  | ConvR4 loc.typp = text "r4"
+  | ConvR8 loc.typp = text "r8"
   | Div lhs.pp = text "div"
   | DivUn lhs.pp = text "div.un"
   | Dup lhs.pp = text "dup"
@@ -299,22 +343,23 @@ SEM Instruction
           if (@value == -1)
             then text "ldc.i4.m1"
             else
-              if (@value >= -127 && @value <= 127)
-                then text "ldc.i4.s"
-                else text "ldc.i4"
-              >#< (text $ show @value)
+              ( if (@value >= -127 && @value <= 127)
+                  then text "ldc.i4.s"
+                  else text "ldc.i4"
+              ) >#< (text $ show @value)
   | Unaligned lhs.pp = text ".unaligned" >#< (text $ show @alignment)
   | LdcI8 lhs.pp = text "ldc.i8" >#< (text $ show @value)
   | LdcR4 lhs.pp = text "ldc.r4" >#< (text $ show @value)
   | LdcR8 lhs.pp = text "ldc.r8" >#< (text $ show @value)
-  | BrFalse BrTrue Br loc.shortmin = -127
-  | BrFalse BrTrue Br loc.shortmax = 127
-  | BrFalse BrTrue Br loc.staticmin = 0
-  | BrFalse BrTrue Br loc.staticmax = -1
-  | BrFalse BrTrue Br lhs.pp =
+  | Beq BrFalse BrTrue Br loc.shortmin = -127
+  | Beq BrFalse BrTrue Br loc.shortmax = 127
+  | Beq BrFalse BrTrue Br loc.staticmin = 0
+  | Beq BrFalse BrTrue Br loc.staticmax = -1
+  | Beq BrFalse BrTrue Br lhs.pp =
       case @target.shortpp of
         Just short -> @loc.mypp >|< @target.shortpp
         Nothing -> @loc.mypp >#< @target.pp
+  | Beq loc.mypp = text "beq"
   | BrFalse loc.mypp = text "brfalse"
   | BrTrue loc.mypp = text "brtrue"
   | Br loc.mypp = text "br"
@@ -335,18 +380,20 @@ SEM Instruction
   | LdsFldA loc.mypp = text "ldsflda"
   | StFld loc.mypp = text "stfld"
   | StsFld loc.mypp = text "stsfld"
-  | Box CastClass CpObj InitObj IsInst LdElemA LdObj MkRefAny NewArr RefAnyVal SizeOf StObj Unbox UnboxAny lhs.pp = @loc.mypp >#< @cls.pp
+  | Box CastClass CpObj InitObj IsInst LdElem LdElemA LdObj MkRefAny NewArr RefAnyVal SizeOf StElem StObj Unbox UnboxAny lhs.pp = @loc.mypp >#< @cls.pp
   | Box loc.mypp = text "box"
   | CastClass loc.mypp = text "castclass"
   | CpObj loc.mypp = text "cpobj"
   | InitObj loc.mypp = text "initobj"
   | IsInst loc.mypp = text "isinst"
+  | LdElem loc.mypp = text "ldelem"
   | LdElemA loc.mypp = text "ldelema"
   | LdObj loc.mypp = text "ldobj"
   | MkRefAny loc.mypp = text "mkrefany"
   | NewArr loc.mypp = text "newarr"
   | RefAnyVal loc.mypp = text "refanyval"
   | SizeOf loc.mypp = text "sizeof"
+  | StElem loc.mypp = text "stelem"
   | StObj loc.mypp = text "stobj"
   | Unbox loc.mypp = text "unbox"
   | UnboxAny loc.mypp = text "unbox.any"

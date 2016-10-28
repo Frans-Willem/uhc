@@ -9,7 +9,7 @@
 %%[1 module {%{EH}MSCIL.Parser} import(UU.Parsing, UHC.Util.ParseUtils, {%{EH}MSCIL}, Data.Char, {%{EH}MSCIL.Scanner}, Data.Bifunctor)
 %%]
 
-%%[(8 core) export(pType, pId, pDottedName, pParam, pParamL, pPrimitiveFFI, parseString)
+%%[(8 core) export(pType, pId, pDottedName, pParam, pParamL, parseString, pPunc, pKeyword, CILParser(..), pInstruction, pSQSTRING, pTypeSpec)
 data CILInput = CILInput [CILToken] !Int
 type CILParser a = AnaParser CILInput Pair CILToken Int a
 
@@ -69,20 +69,59 @@ pDottedName = pList1Sep (pPunc ".") pId
 
 pSimpleType :: CILParser Type
 pSimpleType
-  = (Type_GenMethodParam <$> (pPunc "!!" *> pInteger))
+  = pAny (\(ty, k) -> ty <$ pKeyword k)
+      [ (Type_Bool, "bool")
+      , (Type_Char, "char")
+      , (Type_Float32, "float32")
+      , (Type_Float64, "float64")
+      , (Type_Int8, "int8")
+      , (Type_Int16, "int16")
+      , (Type_Int32, "int32")
+      , (Type_Int64, "int64")
+      , (Type_Object, "object")
+      , (Type_String, "string")
+      , (Type_TypedRef, "typedref")
+      , (Type_Void, "void")
+      ]
+  <|> (Type_GenMethodParam <$> (pPunc "!!" *> pInteger))
   <|> (Type_GenTypeParam <$> (pPunc "!" *> pInteger))
-  <|> Type_Bool <$ pKeyword "bool"
-  <|> Type_Char <$ pKeyword "char"
+  <|> Type_Class <$ pKeyword "class" <*> pTypeReference
+  <|> Type_Method <$ pKeyword "method" <*> pCallConv <*> pType <* pPunc "*" <*> pParamL
   <|> pKeyword "native" *>
     ( Type_NativeInt <$ pKeyword "int"
-    <|> Type_NativeUInt <$ pKeyword "uint"
+    <|> Type_NativeUInt <$ pKeyword "unsigned" <* pKeyword "int"
     )
-  <|> Type_Object <$ pKeyword "object"
-  <|> Type_String <$ pKeyword "string"
-  <|> Type_String <$ pKeyword "void"
+  <|> Type_Valuetype <$ pKeyword "valuetype" <*> pTypeReference
+  <|> pKeyword "unsigned" *>
+    ( Type_UInt8 <$ pKeyword "int8"
+    <|> Type_UInt16 <$ pKeyword "int16"
+    <|> Type_UInt32 <$ pKeyword "int32"
+    <|> Type_UInt64 <$ pKeyword "int64"
+    )
+
+
+pBound :: CILParser Bound
+pBound
+  = Bound_Unspecified <$ pPunc "..."
+  <|> Bound_ZeroTo <$> pInteger
+  <|> Bound_From <$> pInteger <* pPunc "..."
+  <|> Bound_Range <$> pInteger <* pPunc "..." <*> pInteger
+
+pTypeModifier :: CILParser (Type -> Type)
+pTypeModifier
+  = Type_ManagedPtr <$ pPunc "&"
+  <|> Type_UnmanagedPtr <$ pPunc "*"
+  <|> (flip Type_GenType) <$> pPacked (pPunc "<") (pPunc ">") (pList1Sep (pPunc ",") pType)
+  <|> (flip Type_Array) <$> pPacked (pPunc "[") (pPunc "]") (pListSep (pPunc ",") pBound)
+  <|> (flip Type_ModOpt) <$ pKeyword "modopt" <*> pPacked (pPunc "(") (pPunc ")") pTypeReference
+  <|> (flip Type_ModReq) <$ pKeyword "modreq" <*> pPacked (pPunc "(") (pPunc ")") pTypeReference
+  <|> Type_Pinned <$ pKeyword "pinned"
+
+pTypeModifiers :: CILParser (Type -> Type)
+pTypeModifiers = pFoldr (flip (.), id) pTypeModifier
 
 pType :: CILParser Type
-pType = pSimpleType -- TODO: Expand
+pType = pSimpleType <**> pTypeModifiers
 
 pParamAttr :: CILParser ParamAttr
 pParamAttr
@@ -129,11 +168,12 @@ pTypeSpec =
   (TypeSpec_Ref <$> pTypeReference) <|>
   (TypeSpec_Type <$> pType)
 
-pPrimitiveFFI :: CILParser (Type, Id, ParamL)
-pPrimitiveFFI = (\x y z -> (x,y,z)) <$> pType <*> pId <*> pParamL
-
 pCallKind :: CILParser CallKind
-pCallKind = CallKind_Default <$ pKeyword "default" -- TODO: Expand
+pCallKind
+  = opt
+      ( CallKind_Default <$ pKeyword "default" -- TODO: Expand
+      )
+      CallKind_Default
 
 pCallConv :: CILParser CallConv
 pCallConv =
@@ -144,37 +184,96 @@ pCallConv =
 
 pInstructionNoOp :: CILParser Instruction
 pInstructionNoOp =
-  Instruction_Add <$ pKeyword "add" <|>
-  Instruction_AddOvf <$ pKeyword "add.ovf" <|>
-  Instruction_And <$ pKeyword "and" <|>
-  Instruction_CEq <$ pKeyword "ceq" <|>
-  Instruction_CGt <$ pKeyword "cgt" <|>
-  Instruction_CGtUn <$ pKeyword "cgt.un" <|>
-  Instruction_CLt <$ pKeyword "clt" <|>
-  Instruction_CLtUn <$ pKeyword "clt.un" <|>
-  Instruction_Div <$ pKeyword "div" <|>
-  Instruction_DivUn <$ pKeyword "div.un" <|>
-  Instruction_Dup <$ pKeyword "dup" <|>
-  Instruction_LdNull <$ pKeyword "ldnull" <|>
-  Instruction_Mul <$ pKeyword "mul" <|>
-  Instruction_MulOvf <$ pKeyword "mul.ovf" <|>
-  Instruction_MulOvfUn <$ pKeyword "mul.ovf.un" <|>
-  Instruction_Neg <$ pKeyword "neg" <|>
-  Instruction_Nop <$ pKeyword "nop" <|>
-  Instruction_Not <$ pKeyword "not" <|>
-  Instruction_Or <$ pKeyword "or" <|>
-  Instruction_Pop <$ pKeyword "pop" <|>
-  Instruction_Rem <$ pKeyword "rem" <|>
-  Instruction_RemUn <$ pKeyword "rem.un" <|>
-  Instruction_Ret <$ pKeyword "ret" <|>
-  Instruction_Shl <$ pKeyword "shl" <|>
-  Instruction_Shr <$ pKeyword "shr" <|>
-  Instruction_ShrUn <$ pKeyword "shr.un" <|>
-  Instruction_Sub <$ pKeyword "sub" <|>
-  Instruction_SubOvf <$ pKeyword "sub.ovf" <|>
-  Instruction_SubOvfUn <$ pKeyword "sub.ovf.un" <|>
-  Instruction_Tail <$ pKeyword "tail." <|>
-  Instruction_Xor <$ pKeyword "xor"
+  pAny (\(i,k) -> i <$ pKeyword k)
+    (
+    [ (Instruction_Add, "add")
+    , (Instruction_AddOvf, "add.ovf")
+    , (Instruction_And, "and")
+    , (Instruction_CEq, "ceq")
+    , (Instruction_CGt, "cgt")
+    , (Instruction_CGtUn, "cgt.un")
+    , (Instruction_CLt, "clt")
+    , (Instruction_CLtUn, "clt.un")
+    , (Instruction_Div, "div")
+    , (Instruction_DivUn, "div.un")
+    , (Instruction_Dup, "dup")
+    , (Instruction_LdNull, "ldnull")
+    , (Instruction_Mul, "mul")
+    , (Instruction_MulOvf, "mul.ovf")
+    , (Instruction_MulOvfUn, "mul.ovf.un")
+    , (Instruction_Neg, "neg")
+    , (Instruction_Nop, "nop")
+    , (Instruction_Not, "not")
+    , (Instruction_Or, "or")
+    , (Instruction_Pop, "pop")
+    , (Instruction_Rem, "rem")
+    , (Instruction_RemUn, "rem.un")
+    , (Instruction_Ret, "ret")
+    , (Instruction_Shl, "shl")
+    , (Instruction_Shr, "shr")
+    , (Instruction_ShrUn, "shr.un")
+    , (Instruction_Sub, "sub")
+    , (Instruction_SubOvf, "sub.ovf")
+    , (Instruction_SubOvfUn, "sub.ovf.un")
+    , (Instruction_Tail, "tail.")
+    , (Instruction_Xor, "xor")
+    ]
+    ++
+    (map (\i -> (Instruction_LdcI4 i, "ldc.i4." ++ (show i))) [0..8])
+    ++
+    [ (Instruction_LdcI4 (-1), "ldc.i4.m1")
+    , (Instruction_LdcI4 (-1), "ldc.i4.M1")
+    ]
+    ++
+    (concat $ map
+      (\(ty,s) -> [(Instruction_StElem (TypeSpec_Type ty), "stelem." ++ s),(Instruction_LdElem (TypeSpec_Type ty), "ldelem." ++ s)])
+      [ (Type_Int8, "i1")
+      , (Type_Int16, "i2")
+      , (Type_Int32, "i4")
+      , (Type_Int64, "i8")
+      , (Type_Float32, "r4")
+      , (Type_Float64, "r8")
+      , (Type_NativeInt, "i")
+      ]
+    )
+    ++
+    ( map (\(i,ty,ovf,un) -> (i, "conv." ++ (if ovf then ".ovf" else "") ++ ty ++ (if un then ".un" else "")))
+      [ (Instruction_ConvI1, "i1", False, False)
+      , (Instruction_ConvI2, "i2", False, False)
+      , (Instruction_ConvI4, "i4", False, False)
+      , (Instruction_ConvI8, "i8", False, False)
+      , (Instruction_ConvR4, "r4", False, False)
+      , (Instruction_ConvR8, "r8", False, False)
+      , (Instruction_ConvU1, "u1", False, False)
+      , (Instruction_ConvU2, "u2", False, False)
+      , (Instruction_ConvU4, "u4", False, False)
+      , (Instruction_ConvU8, "u8", False, False)
+      , (Instruction_ConvI, "i", False, False)
+      , (Instruction_ConvU, "u", False, False)
+      , (Instruction_ConvRUn, "r", False, True)
+      , (Instruction_ConvOvfI1, "i1", True, False)
+      , (Instruction_ConvOvfI2, "i2", True, False)
+      , (Instruction_ConvOvfI4, "i4", True, False)
+      , (Instruction_ConvOvfI8, "i8", True, False)
+      , (Instruction_ConvOvfU1, "u1", True, False)
+      , (Instruction_ConvOvfU2, "u2", True, False)
+      , (Instruction_ConvOvfU4, "u4", True, False)
+      , (Instruction_ConvOvfU8, "u8", True, False)
+      , (Instruction_ConvOvfI, "i", True, False)
+      , (Instruction_ConvOvfU, "u", True, False)
+      , (Instruction_ConvOvfI1Un, "i1", True, True)
+      , (Instruction_ConvOvfI2Un, "i2", True, True)
+      , (Instruction_ConvOvfI4Un, "i4", True, True)
+      , (Instruction_ConvOvfI8Un, "i8", True, True)
+      , (Instruction_ConvOvfU1Un, "u1", True, True)
+      , (Instruction_ConvOvfU2Un, "u2", True, True)
+      , (Instruction_ConvOvfU4Un, "u4", True, True)
+      , (Instruction_ConvOvfU8Un, "u8", True, True)
+      , (Instruction_ConvOvfIUn, "i", True, True)
+      , (Instruction_ConvOvfUUn, "u", True, True)
+      ]
+    )
+    )
 
 pInstructionParamLocal :: CILParser Instruction
 pInstructionParamLocal =
@@ -206,6 +305,7 @@ pInstructionSingleFloat = pFail -- TODO: Have lexer support floats
 pInstructionBranch :: CILParser Instruction
 pInstructionBranch =
   (
+    (Instruction_Beq <$ (pKeyword "beq" <|> pKeyword "beq.s")) <|>
     (Instruction_BrFalse <$ (pKeyword "brfalse" <|> pKeyword "brfalse.s")) <|>
     (Instruction_BrTrue <$ (pKeyword "brtrue" <|> pKeyword "brtrue.s")) <|>
     (Instruction_Br <$ (pKeyword "br" <|> pKeyword "br.s"))
@@ -254,12 +354,14 @@ pInstructionType =
       , (Instruction_CpObj, "cpobj")
       , (Instruction_InitObj, "initobj")
       , (Instruction_IsInst, "isinst")
+      , (Instruction_LdElem, "ldelem")
       , (Instruction_LdElemA, "ldelema")
       , (Instruction_LdObj, "ldobj")
       , (Instruction_MkRefAny, "mkrefany")
       , (Instruction_NewArr, "newarr")
       , (Instruction_RefAnyVal, "refanyval")
       , (Instruction_SizeOf, "sizeof")
+      , (Instruction_StElem, "stelem")
       , (Instruction_StObj, "stobj")
       , (Instruction_Unbox, "unbox")
       , (Instruction_UnboxAny, "unbox.any")
@@ -277,7 +379,8 @@ pInstruction =
   pInstructionSingleInt <|>
   pInstructionSingleFloat <|>
   pInstructionBranch <|>
+  pInstructionMethod <|>
   pInstructionField <|>
+  pInstructionType <|>
   pInstructionString
-
 %%]

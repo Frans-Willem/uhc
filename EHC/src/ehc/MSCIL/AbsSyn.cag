@@ -7,7 +7,7 @@
 %%]
 %%[(8 core) ag
 DERIVING *
-  : Show
+  : Show, Eq
 DATA Id
   | Id
     value : {String}
@@ -103,15 +103,58 @@ DATA Type
   | Char
   | Class
     ref : TypeReference
+  | Float32
+  | Float64
+  | Int8
+  | Int16
+  | Int32
+  | Int64
+  | Method
+      cc : CallConv
+      ty : Type
+      params : ParamL
   | NativeInt
   | NativeUInt
   | Object
   | String
+  | ManagedPtr
+      ty : Type
+  | UnmanagedPtr
+      ty : Type
   | GenType
       base : Type
       args : TypeL
+  | Array
+      base : Type
+      bounds : BoundL
+  | ModOpt
+      ty : Type
+      ref : TypeReference
+  | ModReq
+      ty : Type
+      ref : TypeReference
+  | Pinned
+      ty : Type
+  | TypedRef
+  | Valuetype
+      ref : TypeReference
+  | UInt8
+  | UInt16
+  | UInt32
+  | UInt64
   | Void
 TYPE TypeL = [Type]
+
+DATA Bound
+  | Unspecified
+  | ZeroTo
+      upper : Int
+  | From
+      lower : Int
+  | Range
+      lower : Int
+      upper : Int
+TYPE BoundL = [Bound]
 
 DATA TypeSpec
   | External
@@ -192,6 +235,39 @@ DATA Instruction
   | CGtUn
   | CLt
   | CLtUn
+  | ConvI1
+  | ConvI2
+  | ConvI4
+  | ConvI8
+  | ConvR4
+  | ConvR8
+  | ConvU1
+  | ConvU2
+  | ConvU4
+  | ConvU8
+  | ConvI
+  | ConvU
+  | ConvRUn
+  | ConvOvfI1
+  | ConvOvfI2
+  | ConvOvfI4
+  | ConvOvfI8
+  | ConvOvfU1
+  | ConvOvfU2
+  | ConvOvfU4
+  | ConvOvfU8
+  | ConvOvfI
+  | ConvOvfU
+  | ConvOvfI1Un
+  | ConvOvfI2Un
+  | ConvOvfI4Un
+  | ConvOvfI8Un
+  | ConvOvfU1Un
+  | ConvOvfU2Un
+  | ConvOvfU4Un
+  | ConvOvfU8Un
+  | ConvOvfIUn
+  | ConvOvfUUn
   | Div
   | DivUn
   | Dup
@@ -243,6 +319,8 @@ DATA Instruction
     value : {Double}
 -- Branch instructions (VI.C.4.7)
 -- Instructions that are likely not used have been omitted
+  | Beq
+    target : EIntId
   | BrFalse
     target : EIntId
   | BrTrue
@@ -322,6 +400,8 @@ DATA Instruction
     cls : TypeSpec
   | IsInst
     cls : TypeSpec
+  | LdElem
+    cls : TypeSpec
   | LdElemA
     cls : TypeSpec
   | LdObj
@@ -334,6 +414,8 @@ DATA Instruction
     cls : TypeSpec
   | SizeOf
     cls : TypeSpec
+  | StElem
+	cls : TypeSpec
   | StObj
     cls : TypeSpec
   | Unbox
