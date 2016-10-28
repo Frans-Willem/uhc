@@ -16,6 +16,8 @@
 %%]
 %%[(8 core) hs import({%{EH}Ty}, {%{EH}Base.TermLike},{%{EH}Base.HsName.Builtin})
 %%]
+%%[(8 core) hs import(qualified {%{EH}MSCIL.FFI} as FFI)
+%%]
 
 %%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn})
 WRAPPER CTm
@@ -398,16 +400,10 @@ SEM CVal
   | TagVal lhs.maxstack = foldr max (length @args) (zipWith (+) @loc.argmaxstack [0..])
   | FFIVal (loc.argsty, loc.retty) = appUnArr @ty
   | FFIVal loc.argkeys = map asKey @args
-  | FFIVal (loc.argsinstr, loc.argsmaxstack) = unzip $ map (readEnv @lhs.env) @loc.argkeys
-  | FFIVal loc.unboxinstr = map unboxInstr @loc.argsty 
-  | FFIVal loc.boxinstr = boxInstr @loc.retty
-  | FFIVal lhs.instr = 
-    [MSCIL.MethodBodyItem_Comment $ "ArgKeys: " ++ (show @argkeys)] ++
-    [MSCIL.MethodBodyItem_Comment $ "ArgTypes: " ++ (show @argsty)] ++
-    (concat $ zipWith (++) @loc.argsinstr @loc.unboxinstr) ++
-    [MSCIL.MethodBodyItem_Raw @instr] ++ 
-    @loc.boxinstr
-  | FFIVal lhs.maxstack = foldr max (length @args `max` 1) (zipWith (+) @loc.argsmaxstack [0..])
+  | FFIVal (loc.ffiinstr, loc.ffimaxstack) = FFI.parseFFI @instr (map (readEnv @lhs.env) @loc.argkeys)
+  | FFIVal lhs.instr = @loc.ffiinstr
+  | FFIVal lhs.maxstack = @loc.ffimaxstack
+--  | FFIVal lhs.maxstack = foldr max (length @args `max` 1) (zipWith (+) @loc.argsmaxstack [0..])
 ----
 -- LetCont
 ----
