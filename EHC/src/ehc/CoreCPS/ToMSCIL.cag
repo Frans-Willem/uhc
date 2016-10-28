@@ -830,7 +830,25 @@ SEM CCasePattern
       , MSCIL.instrRet
       ]
   | Tag lhs.maxstack = foldl max (length @lhs.bodyupvalues) $ @loc.valmaxstack : (zipWith (+) @loc.upvaluemaxstack [0..])
+SEM CCasePattern
   | Int (loc.valinstr, loc.valmaxstack) = readEnv @lhs.env @lhs.valenv
+  | Int loc.label = MSCIL.stringToId $ "Branch" ++ (show @lhs.index)
+  | Int (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @lhs.env) @lhs.bodyupvalues
+  | Int lhs.instr =
+      @loc.valinstr
+      ++
+      [ MSCIL.instrUnboxAny (MSCIL.TypeSpec_Type MSCIL.Type_NativeInt)
+      , MSCIL.instrLdcI4 @value
+      , MSCIL.instrBeq @loc.label
+      ]
+  | Int lhs.finalinstr =
+      [ MSCIL.MethodBodyItem_Label @loc.label ] ++
+      (concat @loc.upvalueinstr) ++
+      [ MSCIL.instrTail
+      , MSCIL.instrCall MSCIL.callConvDefault MSCIL.Type_Void (Just @lhs.branchclass) @lhs.branchmethod (map keyToParam @lhs.bodyupvalues)
+      , MSCIL.instrRet
+      ]
+  | Int lhs.maxstack = foldl max (2 `max` length @lhs.bodyupvalues) $ @loc.valmaxstack : (zipWith (+) @loc.upvaluemaxstack [0..])
 ----
 -- Free and bound variables
 ----
