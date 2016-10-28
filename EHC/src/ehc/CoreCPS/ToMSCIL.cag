@@ -26,7 +26,6 @@ cps2cil :: CTm -> MSCIL.DeclL
 cps2cil tm
   = defaultImports
     ++ defaultAssembly
-    ++ defaultClasses
     ++ createTagClasses (tags_Syn_CTm t)
     ++ (classes_Syn_CTm t)
     ++
@@ -65,9 +64,6 @@ defaultAssembly =
       , MSCIL.AsmDecl_HashAlgorithm 0x8004
       ]
   ]
-
-defaultClasses :: MSCIL.DeclL
-defaultClasses = []
 
 cpslibResolutionScope :: MSCIL.ResolutionScope
 cpslibResolutionScope = MSCIL.ResolutionScope_AssemblyRefName $ MSCIL.stringToAssemblyRefName "cpslib"
