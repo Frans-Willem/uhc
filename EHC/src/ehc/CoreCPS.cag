@@ -25,4 +25,10 @@ newtype ThunkName = ThunkName HsName
 deriving instance Show ValueName
 deriving instance Show ContName
 deriving instance Show ThunkName
+deriving instance Ord ValueName
+deriving instance Ord ContName
+deriving instance Ord ThunkName
+deriving instance Eq ValueName
+deriving instance Eq ContName
+deriving instance Eq ThunkName
 %%]

@@ -1515,7 +1515,11 @@ cpProcessBytecode modNm
 %%[(8 core)
 cpProcessCoreCPS :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()
 cpProcessCoreCPS modNm
-  = do { cpMsg modNm VerboseALot "cpProcessCoreCPS: dumping core cps"
+  = do { cpMsg modNm VerboseALot "cpProcessCoreCPS: uniqifying all names"
+       ; cpTransformCoreCPS modNm
+       ; cpMsg modNm VerboseALot "cpProcessCoreCPS: dumping core"
+       ; void $ cpOutputCore ASTFileContent_Text "" "core" modNm
+       ; cpMsg modNm VerboseALot "cpProcessCoreCPS: dumping core cps"
        ; void $ cpOutputCoreCPS ASTFileContent_Text "" modNm
        ; cpProcessCoreCPSRest modNm
        }

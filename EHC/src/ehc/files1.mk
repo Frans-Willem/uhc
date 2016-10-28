@@ -91,6 +91,7 @@ EHC_HS_UTIL_SRC_CHS_DFLT				:= $(patsubst %,$(SRC_EHC_PREFIX)%.chs,\
 													$(addprefix Core/,Utils Merge FFI Coercion) \
 													$(addprefix Core/SysF/,AsTy) \
 													$(addprefix MSCIL/,Parser Scanner) \
+													$(addprefix CoreCPS/,Trf) \
 													$(addprefix EHC/,Main Common FileSuffMp Environment CompileUnit CompileGroup CompileRun InitialSetup ASTHandler ASTPipeline ASTTypes BuildFunction \
 														$(addprefix Main/,Utils Compile) \
 														$(addprefix BuildFunction/,Run) \

@@ -52,6 +52,10 @@ Interface/wrapper to various transformations for Core, TyCore, etc.
 %%[(8 codegen cmm) import({%{EH}Cmm.Trf})
 %%]
 
+-- CoreCPS transformations
+%%[(8 core) import({%{EH}CoreCPS.Trf})
+%%]
+
 -- Output
 %%[8 import({%{EH}EHC.CompilePhase.Output})
 %%]
@@ -205,3 +209,14 @@ cpTransformCmm optimScope modNm
        }
 %%]
 
+%%[(8 core) export(cpTransformCoreCPS)
+cpTransformCoreCPS :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()
+cpTransformCoreCPS modNm
+  = do { cr <- get
+       ; let (ecu, crsi, opts, fp) = crBaseInfo modNm cr
+       ; cpMsg' modNm VerboseALot "Transforming CoreCPS ..." Nothing fp
+       ; let mbCoreCPS = _ecuMbCoreCPS ecu
+             trfCoreCPSOut = fmap (trfCoreCPS modNm) mbCoreCPS
+       ; cpUpdCU modNm $! ecuStoreCoreCPS (fromJust trfCoreCPSOut)
+       }
+%%]

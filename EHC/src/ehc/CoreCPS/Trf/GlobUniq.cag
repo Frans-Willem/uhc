@@ -1,0 +1,141 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%[(8 core) hs module {%{EH}CoreCPS.Trf.GlobUniq} import({%{EH}CoreCPS}, {%{EH}Ty}, qualified Data.Map as Map, {%{EH}Base.HsName}, Data.Maybe)
+%%]
+
+%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn})
+WRAPPER CTm
+%%]
+
+%%[(8 core) hs export(ctmTrfGlobUniq)
+ctmTrfGlobUniq :: CTm -> CTm
+ctmTrfGlobUniq ctm
+  = let t = wrap_CTm (sem_CTm ctm)
+            ( Inh_CTm
+              { gUniq_Inh_CTm = 1
+              , valMap_Inh_CTm = Map.empty
+              , contMap_Inh_CTm = Map.empty
+              , thunkMap_Inh_CTm = Map.empty
+              }
+            )
+    in cTrf_Syn_CTm t
+%%]
+
+%%[(8 core) hs
+newUniq :: Int -> Int -> (Int,[Int])
+newUniq nr seed = (seed+nr, [seed .. seed + nr - 1])
+
+trfValueName :: ValueName -> Int -> ValueName
+trfValueName (ValueName hsn) n = ValueName (hsnUniqifyInt HsNameUniqifier_GloballyUnique n hsn)
+
+trfContName :: ContName -> Int -> ContName
+trfContName (ContName hsn) n = ContName (hsnUniqifyInt HsNameUniqifier_GloballyUnique n hsn)
+
+trfThunkName :: ThunkName -> Int -> ThunkName
+trfThunkName (ThunkName hsn) n = ThunkName (hsnUniqifyInt HsNameUniqifier_GloballyUnique n hsn)
+
+lookupThunkName :: Map.Map ThunkName ThunkName -> ThunkName -> ThunkName
+lookupThunkName m t = Map.findWithDefault t t m
+
+lookupContName :: Map.Map ContName ContName -> ContName -> ContName
+lookupContName m c = Map.findWithDefault c c m
+
+lookupValueName :: Map.Map ValueName ValueName -> ValueName -> ValueName
+lookupValueName m v = Map.findWithDefault v v m
+%%]
+
+%%[(8 core)
+ATTR CTm CVal CThunkBind CThunkBindL CCaseBranch CCaseBranchL CCasePattern [ | gUniq : {Int} | ]
+ATTR CTm CVal CThunkBind CThunkBindL CCaseBranch CCaseBranchL CCasePattern [ valMap : {Map.Map ValueName ValueName} | | ]
+ATTR CTm CVal CThunkBind CThunkBindL CCaseBranch CCaseBranchL CCasePattern [ contMap : {Map.Map ContName ContName} | | ]
+ATTR CTm CVal CThunkBind CThunkBindL CCaseBranch CCaseBranchL CCasePattern [ thunkMap : {Map.Map ThunkName ThunkName} | | ]
+
+ATTR CTm CVal CThunkBind CThunkBindL CCaseBranch CCaseBranchL CCasePattern [ | | cTrf : SELF ]
+
+SEM CTm
+  | LetVal (bindvalue.gUniq, loc.lUniq) = newUniq 1 @lhs.gUniq
+  | LetVal loc.trfBindname = trfValueName @bindname (@loc.lUniq !! 0)
+  | LetVal body.valMap = Map.insert @bindname @loc.trfBindname @lhs.valMap
+  | LetVal lhs.cTrf = CTm_LetVal @loc.trfBindname @bindvalue.cTrf @body.cTrf
+
+SEM CVal
+--  | IntVal lhs.cTrf = @self
+--  | StringVal lhs.cTrf = @self
+SEM CVal
+  | LamVal (body.gUniq, loc.lUniq) = newUniq 2 @lhs.gUniq
+  | LamVal loc.newBindcont = trfContName @bindcont (@loc.lUniq !! 0)
+  | LamVal loc.newBindarg = trfThunkName @bindarg (@loc.lUniq !! 1)
+  | LamVal body.contMap = Map.insert @bindcont @loc.newBindcont @lhs.contMap
+  | LamVal body.thunkMap = Map.insert @bindarg @loc.newBindarg @lhs.thunkMap
+  | LamVal lhs.cTrf = CVal_LamVal @loc.newBindcont @loc.newBindarg @body.cTrf
+SEM CVal
+  | TagVal loc.newArgs = map (lookupThunkName @lhs.thunkMap) @args
+  | TagVal lhs.cTrf = CVal_TagVal @tag @loc.newArgs
+SEM CVal
+  | FFIVal loc.newArgs = map (lookupValueName @lhs.valMap) @args
+  | FFIVal lhs.cTrf = CVal_FFIVal @instr @loc.newArgs @ty
+
+SEM CTm
+  | LetCont (bindbody.gUniq, loc.lUniq) = newUniq 2 @lhs.gUniq
+  | LetCont loc.trfContname = trfContName @contname (@loc.lUniq !! 0)
+  | LetCont loc.trfValname = trfValueName @valname (@loc.lUniq !! 1)
+  | LetCont bindbody.valMap = Map.insert @valname @loc.trfValname @lhs.valMap
+  | LetCont body.contMap = Map.insert @contname @loc.trfContname @lhs.contMap
+  | LetCont lhs.cTrf = CTm_LetCont @loc.trfContname @loc.trfValname @bindbody.cTrf @body.cTrf
+
+SEM CTm
+  | LetThunk loc.newThunkMap = @binds.bindMap `Map.union` @lhs.thunkMap
+  | LetThunk binds.thunkMap = @loc.newThunkMap
+  | LetThunk body.thunkMap = @loc.newThunkMap
+
+ATTR CThunkBind CThunkBindL [ | | bindMap USE {Map.union} {Map.empty} : {Map.Map ThunkName ThunkName} ]
+SEM CThunkBind
+  | ThunkBind (body.gUniq, loc.lUniq) = newUniq 2 @lhs.gUniq
+  | ThunkBind loc.trfThunkname = trfThunkName @thunkname (@loc.lUniq !! 0)
+  | ThunkBind loc.trfContname = trfContName @contname (@loc.lUniq !! 1)
+  | ThunkBind lhs.bindMap = Map.singleton @thunkname @loc.trfThunkname
+  | ThunkBind body.contMap = Map.insert @contname @loc.trfContname @lhs.contMap
+  | ThunkBind lhs.cTrf = CThunkBind_ThunkBind @loc.trfThunkname @loc.trfContname @body.cTrf
+
+SEM CTm
+  | ContAppl loc.trfCont = lookupContName @lhs.contMap @cont
+  | ContAppl loc.trfVal = lookupValueName @lhs.valMap @val
+  | ContAppl lhs.cTrf = CTm_ContAppl @loc.trfCont @loc.trfVal
+
+SEM CTm
+  | ThunkEval loc.trfThunk = lookupThunkName @lhs.thunkMap @thunk
+  | ThunkEval loc.trfCont = lookupContName @lhs.contMap @cont
+  | ThunkEval lhs.cTrf = CTm_ThunkEval @loc.trfThunk @loc.trfCont
+
+SEM CTm
+  | FuncAppl loc.trfFunc = lookupValueName @lhs.valMap @func
+  | FuncAppl loc.trfCont = lookupContName @lhs.contMap @cont
+  | FuncAppl loc.trfArg = lookupThunkName @lhs.thunkMap @arg
+  | FuncAppl lhs.cTrf = CTm_FuncAppl @loc.trfFunc @loc.trfCont @loc.trfArg
+
+SEM CTm
+  | Exit loc.trfVal = lookupValueName @lhs.valMap @val
+  | Exit lhs.cTrf = CTm_Exit @loc.trfVal
+
+SEM CTm
+  | Case loc.trfVal = lookupValueName @lhs.valMap @val
+  | Case lhs.cTrf = CTm_Case @loc.trfVal @branches.cTrf
+
+ATTR CCasePattern [ | | bindMap : {Map.Map ThunkName ThunkName} ]
+SEM CCasePattern
+  | Default Int lhs.bindMap = Map.empty
+  | Tag loc.input = (maybeToList @rest) ++ @args
+  | Tag (lhs.gUniq, loc.lUniq) = newUniq (length @loc.input) @lhs.gUniq
+  | Tag loc.output = zipWith trfThunkName @loc.input @loc.lUniq
+  | Tag loc.bindMap = Map.fromList (zip @loc.input @loc.output)
+  | Tag loc.trfArgs = map (lookupThunkName @loc.bindMap) @args
+  | Tag loc.trfRest = fmap (lookupThunkName @loc.bindMap) @rest
+  | Tag lhs.cTrf = CCasePattern_Tag @tag @loc.trfRest @loc.trfArgs
+
+SEM CCaseBranch
+  | CaseBranch body.thunkMap = @pat.bindMap `Map.union` @lhs.thunkMap
+
+%%]
