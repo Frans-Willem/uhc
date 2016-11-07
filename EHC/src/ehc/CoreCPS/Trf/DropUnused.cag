@@ -1,0 +1,75 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%[(8 core) hs module {%{EH}CoreCPS.Trf.DropUnused} import ({%{EH}CoreCPS}, qualified Data.Set as Set, Data.Maybe, {%{EH}Ty})
+%%]
+%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn})
+WRAPPER CTm
+%%]
+
+%%[(8 core) hs export(ctmTrfDropUnused)
+ctmTrfDropUnused :: CTm -> CTm
+ctmTrfDropUnused ctm
+  = let t = wrap_CTm (sem_CTm ctm)
+            ( Inh_CTm
+              { }
+            )
+    in dropunused_Syn_CTm t
+%%]
+
+%%[(8 core)
+ATTR CTm CVal CThunkBind CThunkBindL CCasePattern CCaseBranch CCaseBranchL [ | | freevals USE {Set.union} {Set.empty} : {Set.Set ValueName} ]
+ATTR CTm CVal CThunkBind CThunkBindL CCasePattern CCaseBranch CCaseBranchL [ | | freeconts USE {Set.union} {Set.empty} : {Set.Set ContName} ]
+ATTR CTm CVal CThunkBind CThunkBindL CCasePattern CCaseBranch CCaseBranchL [ | | freethunks USE {Set.union} {Set.empty} : {Set.Set ThunkName} ]
+
+SEM CVal
+  | LamVal lhs.freeconts = Set.delete @bindcont @body.freeconts
+  | LamVal lhs.freethunks = Set.delete @bindarg @body.freethunks
+SEM CVal
+  | TagVal lhs.freethunks = Set.fromList @args
+SEM CVal
+  | FFIVal lhs.freevals = Set.fromList @args
+
+SEM CThunkBind
+  | ThunkBind lhs.freeconts = Set.delete @contname @body.freeconts
+
+ATTR CThunkBind CThunkBindL CCasePattern [ | | boundthunks USE {Set.union} {Set.empty} : {Set.Set ThunkName} ]
+SEM CThunkBind
+  | ThunkBind lhs.boundthunks = Set.singleton @thunkname
+SEM CCasePattern
+  | Tag lhs.boundthunks = Set.fromList ((maybeToList @rest) ++ @args)
+
+SEM CCaseBranch
+  | CaseBranch lhs.freethunks = @body.freethunks `Set.difference` @pat.boundthunks
+
+SEM CTm
+  | LetVal lhs.freevals = @bindvalue.freevals `Set.union` (Set.delete @bindname @body.freevals)
+  | LetCont lhs.freeconts = @bindbody.freeconts `Set.union` (Set.delete @contname @body.freeconts)
+  | LetThunk lhs.freethunks = (@binds.freethunks `Set.union` @body.freethunks) `Set.difference` @binds.boundthunks
+  | ContAppl lhs.freeconts = Set.singleton @cont
+  | ContAppl lhs.freevals = Set.singleton @val
+  | ThunkEval lhs.freethunks = Set.singleton @thunk
+  | ThunkEval lhs.freeconts = Set.singleton @cont
+  | FuncAppl lhs.freevals = Set.singleton @func
+  | FuncAppl lhs.freeconts = Set.singleton @cont
+  | FuncAppl lhs.freethunks = Set.singleton @arg
+  | Exit lhs.freevals = Set.singleton @val
+  | Case lhs.freevals = (Set.singleton @val) `Set.union` @branches.freevals
+
+ATTR CTm CVal CThunkBind CThunkBindL CCasePattern CCaseBranch CCaseBranchL [ | | dropunused : SELF ]
+SEM CTm
+  | LetVal lhs.dropunused =
+      case (Set.member @bindname @body.freevals) of
+        True -> CTm_LetVal @bindname @bindvalue.dropunused @body.dropunused
+        False -> @body.dropunused
+  | LetCont lhs.dropunused =
+      case (Set.member @contname @body.freeconts) of
+        True -> CTm_LetCont @contname @valname @bindbody.dropunused @body.dropunused
+        False -> @body.dropunused
+  | LetThunk lhs.dropunused = 
+      case (Set.null (@body.freethunks `Set.intersection` @binds.boundthunks)) of
+        False -> CTm_LetThunk @binds.dropunused @body.dropunused
+        True -> @body.dropunused
+%%]

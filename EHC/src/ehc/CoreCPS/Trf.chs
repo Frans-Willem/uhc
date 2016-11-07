@@ -1,8 +1,19 @@
 %%[(8 core) hs module ({%{EH}CoreCPS.Trf})
 %%]
-%%[(8 core) import({%{EH}CoreCPS.Trf.GlobUniq}, {%{EH}Base.HsName}, {%{EH}CoreCPS})
+%%[(8 core) import({%{EH}CoreCPS.Trf.GlobUniq}, {%{EH}CoreCPS.Trf.Inline}, {%{EH}CoreCPS.Trf.DropUnused}, {%{EH}Base.HsName}, {%{EH}CoreCPS})
 %%]
 %%[(8 core) export(trfCoreCPS)
-trfCoreCPS :: HsName -> CTm -> CTm
-trfCoreCPS nm = ctmTrfGlobUniq
+trfs :: [(CTm -> CTm, String)]
+trfs =
+  [ (ctmTrfGlobUniq, "globuniq")
+  , (ctmTrfInline, "inline")
+  , (ctmTrfDropUnused, "dropunused")
+  ]
+trfCoreCPS :: HsName -> CTm -> ([(String,CTm)],CTm)
+trfCoreCPS nm initial
+  = (zip names results, last results)
+  where
+    results = scanl (\ctm trf -> trf ctm) initial (map fst trfs)
+    names = "initial" : (map snd trfs)
+    
 %%]

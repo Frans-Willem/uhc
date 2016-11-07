@@ -216,7 +216,9 @@ cpTransformCoreCPS modNm
        ; let (ecu, crsi, opts, fp) = crBaseInfo modNm cr
        ; cpMsg' modNm VerboseALot "Transforming CoreCPS ..." Nothing fp
        ; let mbCoreCPS = _ecuMbCoreCPS ecu
-             trfCoreCPSOut = fmap (trfCoreCPS modNm) mbCoreCPS
-       ; cpUpdCU modNm $! ecuStoreCoreCPS (fromJust trfCoreCPSOut)
+             (trfCoreCPSStages, trfCoreCPSOut) = fromJust (fmap (trfCoreCPS modNm) mbCoreCPS)
+       ; cpMsg' modNm VerboseALot "Dumping inbetween stages ..." Nothing fp
+       ; cpOutputSomeModules (Just opts) astHandler'_CoreCPS ASTFileContent_Text (\n nm -> "-" ++ show n ++ "-" ++ nm) "corecps" modNm trfCoreCPSStages
+       ; cpUpdCU modNm $! ecuStoreCoreCPS trfCoreCPSOut
        }
 %%]

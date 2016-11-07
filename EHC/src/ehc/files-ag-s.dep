@@ -87,6 +87,8 @@ CoreCPS/Pretty.cag
 CoreCPS/ToLuaBC.cag
 CoreCPS/ToMSCIL.cag
 CoreCPS/Trf/GlobUniq.cag
+CoreCPS/Trf/Inline.cag
+CoreCPS/Trf/DropUnused.cag
 LuaBC/Pretty.cag
 LuaBC/ToBinary.cag
 MSCIL/Pretty.cag
