@@ -31,7 +31,11 @@ data ReplaceMap =
     , thunkReplace :: Map.Map ThunkName (ThunkName, Maybe ThunkInlineInfo)
     }
 
-type ValueInlineInfo = (CTm, ReplaceMap, ContName, [ThunkName])
+data ValueInlineInfo
+  = IntInlineInfo Int
+  | StringInlineInfo String
+  | FuncInlineInfo CTm ReplaceMap ContName [ThunkName]
+  | TagInlineInfo CTag [(ThunkName, Maybe ThunkInlineInfo)]
 type ContInlineInfo = (CTm, ReplaceMap, ValueName)
 type ThunkInlineInfo = (CTm, ReplaceMap, ContName)
 
@@ -108,7 +112,9 @@ ATTR CTm CVal CThunkBind CThunkBindL CCasePattern CCaseBranch CCaseBranchL [ | |
 ATTR CVal [ | | inlineInfo : {Maybe ValueInlineInfo} ]
 
 SEM CVal
-  | * - LamVal lhs.inlineInfo = Nothing
+  | IntVal lhs.inlineInfo = Just (IntInlineInfo @value)
+  | StringVal lhs.inlineInfo = Just (StringInlineInfo @value)
+SEM CVal
   | LamVal loc.newBindCont = trfContName @bindcont @lhs.inlineId
   | LamVal loc.newBindArg = trfThunkName @bindarg @lhs.inlineId
   | LamVal loc.replace = insertCont @bindcont (@loc.newBindCont, Nothing) (insertThunk @bindarg (@loc.newBindArg, Nothing) @lhs.replace)
@@ -116,9 +122,14 @@ SEM CVal
   | LamVal lhs.inlineInfo =
       case @loc.shouldInline of
         False -> Nothing
-        True -> Just (@body.original, @loc.replace, @bindcont, [@bindarg])
+        True -> Just (FuncInlineInfo @body.original @loc.replace @bindcont [@bindarg])
   | LamVal lhs.inlined = CVal_LamVal @loc.newBindCont @loc.newBindArg @body.inlined
+SEM CVal
+  | TagVal lhs.inlineInfo = Just (TagInlineInfo @tag (map (infoThunkName @lhs.replace) @args))
   | TagVal lhs.inlined = CVal_TagVal @tag (map (replaceThunkName @lhs.replace) @args)
+
+SEM CVal
+  | FFIVal lhs.inlineInfo = Nothing
   | FFIVal lhs.inlined = CVal_FFIVal @instr (map (replaceValueName @lhs.replace) @args) @ty
 
 SEM CTm
@@ -213,14 +224,7 @@ SEM CTm
   | FuncAppl loc.argInfo = infoThunkName @lhs.replace @arg
   | FuncAppl (lhs.inlined, lhs.nextInlineId) =
       case @loc.funcInline of
-        Nothing ->
-          ( CTm_FuncAppl
-            @loc.newFuncName
-            (fst @loc.contInfo)
-            (fst @loc.argInfo)
-          , @lhs.nextInlineId
-          ) 
-        Just (body, replace, contname, argnames) ->
+        Just (FuncInlineInfo body replace contname argnames) ->
           applyReplaceMap
             body
             ( foldr
@@ -229,6 +233,13 @@ SEM CTm
               (zip argnames [@loc.argInfo])
             )
             @lhs.nextInlineId
+        _ ->
+          ( CTm_FuncAppl
+            @loc.newFuncName
+            (fst @loc.contInfo)
+            (fst @loc.argInfo)
+          , @lhs.nextInlineId
+          ) 
 
 SEM CTm
   | Exit loc.newValName = replaceValueName @lhs.replace @val
