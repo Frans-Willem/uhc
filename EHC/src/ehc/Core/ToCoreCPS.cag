@@ -138,46 +138,117 @@ SEM CExpr
           @lhs.cpsContent
 
 {- Lambda translation -}
+ATTR CExpr [ inLam : {Bool} | | ]
+SEM CExpr
+  | Let body.inLam = False
+  | App func.inLam = False
+  | Lam body.inLam = True
+  | Case expr.inLam = False
+  | Case dflt.inLam = False
+  | CaseAltFail errorExpr.inLam = False
+  | TupDel expr.inLam = False
+  | TupDel offset.inLam = False
+  | TupIns expr.inLam = False
+  | TupIns offset.inLam = False
+  | TupUpd expr.inLam = False
+  | TupUpd offset.inLam = False
+  | Ann expr.inLam = False
+SEM CAlt
+  | Alt expr.inLam = False
+SEM CBound
+  | Bind expr.inLam = False
+  | Val expr.inLam = False
+
+ATTR CExpr [ | | lamArgs : {[CPS.ThunkName]} ]
+SEM CExpr
+  | Lam loc.lamArgs = @bind.cpsBindName : @body.lamArgs
+  | * - Lam lhs.lamArgs = []
+
+ATTR CExpr [ lamWrapperFunc : {CPS.ValueName} lamWrapperCont : {CPS.ContName} lamWrapperArgs : {[CPS.ThunkName]} | | lamWrapper : {CPS.CTm} ]
+SEM CExpr
+  | * - Lam lhs.lamWrapper = CPS.CTm_FuncAppl @lhs.lamWrapperFunc @lhs.lamWrapperCont @lhs.lamWrapperArgs
+  | Lam loc.cpsLamWrapperContNumber : UNIQUEREF cpsFreshContCounter
+  | Lam loc.cpsLamWrapperContName = createFreshContName @loc.cpsLamWrapperContNumber
+  | Lam loc.cpsLamWrapperVal = CPS.CVal_LamVal @loc.cpsLamWrapperContName [@bind.cpsBindName] @body.lamWrapper
+  | Lam body.lamWrapperCont = @loc.cpsLamWrapperContName
+  | Lam loc.cpsLamWrapperValueNumber : UNIQUEREF cpsFreshValueCounter
+  | Lam loc.cpsLamWrapperValueName = createFreshValueName @loc.cpsLamWrapperValueNumber
+  | Lam lhs.lamWrapper = CPS.CTm_LetVal @loc.cpsLamWrapperValueName @loc.cpsLamWrapperVal (CPS.CTm_ContAppl @lhs.lamWrapperCont @loc.cpsLamWrapperValueName)
+  | Lam body.lamWrapperFunc =
+      if @lhs.inLam
+        then @lhs.lamWrapperFunc
+        else @loc.cpsFinalValueName
+  | Lam body.lamWrapperArgs =
+      if @lhs.inLam
+        then @lhs.lamWrapperArgs
+        else @loc.lamArgs
+
+
 SEM CExpr
 {- Fresh variable names -}
   | Lam loc.cpsLamContNumber : UNIQUEREF cpsFreshContCounter
   | Lam loc.cpsLamContName = createFreshContName @loc.cpsLamContNumber
   | Lam loc.cpsThunkContNumber : UNIQUEREF cpsFreshContCounter
   | Lam loc.cpsThunkContName = createFreshContName @loc.cpsThunkContNumber
-  | Lam loc.cpsValueNumber : UNIQUEREF cpsFreshValueCounter
-  | Lam loc.cpsValueName = createFreshValueName @loc.cpsValueNumber
+  | Lam loc.cpsFinalValueNumber : UNIQUEREF cpsFreshValueCounter
+  | Lam loc.cpsFinalValueName = createFreshValueName @loc.cpsFinalValueNumber
   | Lam loc.cpsThunkNumber : UNIQUEREF cpsFreshThunkCounter
   | Lam loc.cpsThunkName = createFreshThunkName @loc.cpsThunkNumber
 {- Value -}
   | Lam loc.cpsValue =
-      CPS.CVal_LamVal @loc.cpsLamContName @bind.cpsBindName @body.cpsTrans
-  | Lam body.cpsScheme = CPSTranslationScheme_ContinuationCall
-  | Lam body.cpsContName = @loc.cpsLamContName
+      CPS.CVal_LamVal @loc.cpsLamContName @loc.lamArgs @body.cpsTrans
+{- Body translation -}
+  | Lam body.cpsScheme =
+      case @lhs.inLam of
+        True -> @lhs.cpsScheme
+        False -> CPSTranslationScheme_ContinuationCall
+  | Lam body.cpsContName =
+      case @lhs.inLam of
+        True -> @lhs.cpsContName
+        False -> @loc.cpsLamContName
 {- Actual translation -}
-  | Lam lhs.cpsTrans =
-      case @lhs.cpsScheme of
-        CPSTranslationScheme_Value ->
-          CPS.CTm_LetVal 
-            @loc.cpsValueName
-            @loc.cpsValue
-            @lhs.cpsContent
-        CPSTranslationScheme_ContinuationCall ->
-          CPS.CTm_LetVal
-            @loc.cpsValueName
-            @loc.cpsValue
-            (CPS.CTm_ContAppl @lhs.cpsContName @loc.cpsValueName)
-        CPSTranslationScheme_Thunk ->
-          CPS.CTm_LetThunk
-            [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsThunkContName
-              (
-                CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue 
-                (
-                  CPS.CTm_ContAppl
-                  @loc.cpsThunkContName
-                  @loc.cpsValueName
+  | Lam loc.cpsValueName =
+      if (length @loc.lamArgs > 1)
+        then @loc.cpsLamWrapperValueName
+        else @loc.cpsFinalValueName
+  | Lam loc.cpsWrapLets =
+      (\content ->
+        CPS.CTm_LetVal
+          @loc.cpsFinalValueName
+          @loc.cpsValue
+          ( if (length @loc.lamArgs > 1)
+              then
+                ( CPS.CTm_LetVal
+                  @loc.cpsLamWrapperValueName
+                  @loc.cpsLamWrapperVal
+                  content
                 )
-              )]
-            @lhs.cpsContent
+              else
+                content
+          )
+        )
+  | Lam lhs.cpsTrans =
+      case @lhs.inLam of
+        True -> @body.cpsTrans
+        False ->
+          case @lhs.cpsScheme of
+            CPSTranslationScheme_Value ->
+              @loc.cpsWrapLets @lhs.cpsContent
+            CPSTranslationScheme_ContinuationCall ->
+              @loc.cpsWrapLets
+                (CPS.CTm_ContAppl @lhs.cpsContName @loc.cpsValueName)
+            CPSTranslationScheme_Thunk ->
+              CPS.CTm_LetThunk
+                [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsThunkContName
+                  (
+                    @loc.cpsWrapLets
+                      (
+                        CPS.CTm_ContAppl
+                        @loc.cpsThunkContName
+                        @loc.cpsValueName
+                      )
+                  )]
+                @lhs.cpsContent
 
 {- Application transformation -}
 SEM CExpr
@@ -216,18 +287,18 @@ SEM CExpr
                 (CPS.CTm_FuncAppl
                   @func.cpsValueName
                   @loc.cpsAppContName
-                  @arg.cpsThunkName
+                  [@arg.cpsThunkName]
                 )
             CPSTranslationScheme_ContinuationCall ->
               CPS.CTm_FuncAppl
                 @func.cpsValueName
                 @lhs.cpsContName
-                @arg.cpsThunkName
+                [@arg.cpsThunkName]
             CPSTranslationScheme_Thunk ->
               CPS.CTm_FuncAppl
                 @func.cpsValueName
                 @loc.cpsAppContName
-                @arg.cpsThunkName
+                [@arg.cpsThunkName]
   | App func.tagArgs = @arg.cpsThunkName : @lhs.tagArgs
   | App func.ffiArgs = @arg.cpsValueName : @lhs.ffiArgs
   | App lhs.cpsTrans = 

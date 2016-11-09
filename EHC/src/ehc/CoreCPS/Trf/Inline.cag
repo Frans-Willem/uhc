@@ -86,6 +86,9 @@ insertCont k v r = r { contReplace = Map.insert k v (contReplace r) }
 insertThunk :: ThunkName -> (ThunkName, Maybe ThunkInlineInfo) -> ReplaceMap -> ReplaceMap
 insertThunk k v r = r { thunkReplace = Map.insert k v (thunkReplace r) }
 
+insertThunks :: [(ThunkName, (ThunkName, Maybe ThunkInlineInfo))] -> ReplaceMap -> ReplaceMap
+insertThunks t r = r { thunkReplace = ((Map.fromList t) `Map.union` (thunkReplace r)) }
+
 replaceUnion :: ReplaceMap -> ReplaceMap -> ReplaceMap
 replaceUnion (ReplaceMap a1 a2 a3) (ReplaceMap b1 b2 b3) = ReplaceMap (Map.union a1 b1) (Map.union a2 b2) (Map.union a3 b3)
 
@@ -116,14 +119,21 @@ SEM CVal
   | StringVal lhs.inlineInfo = Just (StringInlineInfo @value)
 SEM CVal
   | LamVal loc.newBindCont = trfContName @bindcont @lhs.inlineId
-  | LamVal loc.newBindArg = trfThunkName @bindarg @lhs.inlineId
-  | LamVal loc.replace = insertCont @bindcont (@loc.newBindCont, Nothing) (insertThunk @bindarg (@loc.newBindArg, Nothing) @lhs.replace)
+  | LamVal loc.newBindArgs = map (\x -> trfThunkName x @lhs.inlineId) @bindargs
+  | LamVal loc.replace =
+      insertCont
+        @bindcont
+        (@loc.newBindCont, Nothing)
+        ( insertThunks
+            (zip @bindargs (map (\x -> (x,Nothing)) @loc.newBindArgs))
+            @lhs.replace
+        )
   | LamVal body.replace = @loc.replace
   | LamVal lhs.inlineInfo =
       case @loc.shouldInline of
         False -> Nothing
-        True -> Just (FuncInlineInfo @body.original @loc.replace @bindcont [@bindarg])
-  | LamVal lhs.inlined = CVal_LamVal @loc.newBindCont @loc.newBindArg @body.inlined
+        True -> Just (FuncInlineInfo @body.original @loc.replace @bindcont @bindargs)
+  | LamVal lhs.inlined = CVal_LamVal @loc.newBindCont @loc.newBindArgs @body.inlined
 SEM CVal
   | TagVal lhs.inlineInfo = Just (TagInlineInfo @tag (map (infoThunkName @lhs.replace) @args))
   | TagVal lhs.inlined = CVal_TagVal @tag (map (replaceThunkName @lhs.replace) @args)
@@ -221,7 +231,7 @@ SEM CTm
 SEM CTm
   | FuncAppl (loc.newFuncName, loc.funcInline) = infoValueName @lhs.replace @func
   | FuncAppl loc.contInfo = infoContName @lhs.replace @cont
-  | FuncAppl loc.argInfo = infoThunkName @lhs.replace @arg
+  | FuncAppl loc.argsInfo = map (infoThunkName @lhs.replace) @args
   | FuncAppl (lhs.inlined, lhs.nextInlineId) =
       case @loc.funcInline of
         Just (FuncInlineInfo body replace contname argnames) ->
@@ -230,14 +240,14 @@ SEM CTm
             ( foldr
               (\(k, v) m -> insertThunk k v m)
               (insertCont contname @loc.contInfo replace)
-              (zip argnames [@loc.argInfo])
+              (zip argnames @loc.argsInfo)
             )
             @lhs.nextInlineId
         _ ->
           ( CTm_FuncAppl
             @loc.newFuncName
             (fst @loc.contInfo)
-            (fst @loc.argInfo)
+            (map fst @loc.argsInfo)
           , @lhs.nextInlineId
           ) 
 

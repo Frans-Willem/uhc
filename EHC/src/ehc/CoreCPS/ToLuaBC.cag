@@ -245,7 +245,7 @@ SEM CTm
   | LetThunk lhs.freevars = (@binds.freevars `Set.union` @body.freevars) `Set.difference` @binds.boundvars
   | ContAppl lhs.freevars = Set.fromList [contName @cont, valueName @val]
   | ThunkEval lhs.freevars = Set.fromList [thunkName @thunk, contName @cont]
-  | FuncAppl lhs.freevars = Set.fromList [valueName @func, contName @cont, thunkName @arg]
+  | FuncAppl lhs.freevars = Set.fromList ([valueName @func, contName @cont] ++ (map thunkName @args))
   | Exit lhs.freevars = Set.fromList [valueName @val]
 SEM CVal
   | IntVal StringVal lhs.freevars = Set.empty

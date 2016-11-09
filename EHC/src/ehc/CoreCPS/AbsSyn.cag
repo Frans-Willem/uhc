@@ -9,7 +9,7 @@ DATA CVal
   | StringVal value : {String}
   | LamVal
       bindcont : {ContName}
-      bindarg : {ThunkName}
+      bindargs : {[ThunkName]}
       body : CTm
   | TagVal
       tag : {CTag}
@@ -61,7 +61,7 @@ DATA CTm
   | FuncAppl
       func : {ValueName}
       cont : {ContName}
-      arg : {ThunkName}
+      args : {[ThunkName]}
   | Exit
       val : {ValueName}
   | Case

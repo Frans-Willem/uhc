@@ -49,7 +49,7 @@ SEM CTm
       = (text "let thunk" >#< @binds.pp) >-< (text "in" >#< @body.pp)
   | ContAppl lhs.pp = @cont >#< @val >#< text "(cont-appl)"
   | ThunkEval lhs.pp = @thunk >#< @cont >#< text "(thunk-eval)"
-  | FuncAppl lhs.pp = @func >#< @cont >#< @arg >#< text "(func-appl)"
+  | FuncAppl lhs.pp = @func >#< @cont >#< (ppSpaces @args) >#< text "(func-appl)"
   | Exit lhs.pp = @val >#< text "(exit)"
   | Case lhs.pp =
       (text "case" >#< @val >#< text "of") >-<
@@ -65,7 +65,7 @@ SEM CVal
   | IntVal lhs.pp = text "#Int" >#< @value
   | StringVal lhs.pp = text "#String" >#< @value
   | LamVal lhs.pp
-      = text "(\\" >|< @bindcont >#< @bindarg >#< text "->" >#< @body.pp >|< text ")"
+      = text "(\\" >|< @bindcont >#< (ppSpaces @bindargs) >#< text "->" >#< @body.pp >|< text ")"
   | TagVal lhs.pp
       = text "#Tag" >#< ppSpaces ((pp @tag) : map pp @args)
   | FFIVal lhs.pp

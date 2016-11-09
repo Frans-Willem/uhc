@@ -331,14 +331,14 @@ SEM CVal
   | IntVal StringVal lhs.maxstack = 1
   | LamVal loc.classname = functionClassName @lhs.name
   | LamVal loc.contkey = asKey @bindcont
-  | LamVal loc.thunkkey = asKey @bindarg
-  | LamVal loc.upvalues = Set.toList $ (@body.freevars `Set.difference` (Set.fromList [@loc.contkey, @loc.thunkkey]))
+  | LamVal loc.thunkkeys = map asKey @bindargs
+  | LamVal loc.upvalues = Set.toList $ (@body.freevars `Set.difference` (Set.fromList (@loc.contkey : @loc.thunkkeys)))
   | LamVal lhs.classes =
       [ MSCIL.Decl_Class
           ( MSCIL.classHeader
             [MSCIL.ClassAttr_Public, MSCIL.ClassAttr_Auto, MSCIL.ClassAttr_Ansi]
             @loc.classname
-            (map MSCIL.typeToTypeSpec [MSCIL.Type_Object, functionBase MSCIL.Type_Object [MSCIL.Type_Object]])
+            (map MSCIL.typeToTypeSpec [MSCIL.Type_Object, functionBase MSCIL.Type_Object (map (const MSCIL.Type_Object) @bindargs)])
           )
           (
             (map (MSCIL.ClassMember_Field . keyToFieldDecl) @loc.upvalues)
@@ -366,9 +366,9 @@ SEM CVal
                 (Just MSCIL.callConv_Instance)
                 MSCIL.Type_Void
                 (MSCIL.stringToMethodName "Apply")
-                [ keyToNamedParam @loc.contkey
-                , keyToNamedParam @loc.thunkkey
-                ]
+                ( keyToNamedParam @loc.contkey
+                : map keyToNamedParam @loc.thunkkeys
+                )
               )
               ( MSCIL.MethodBodyItem_MaxStack @body.maxstack
               : MSCIL.MethodBodyItem_Locals False @body.locals
@@ -380,8 +380,7 @@ SEM CVal
   | LamVal body.localoffset = 0
   | LamVal body.env =
       Map.fromList $
-        (@loc.contkey, Argument 1) :
-        (@loc.thunkkey, Argument 2) :
+        (zip (@loc.contkey : @loc.thunkkeys) (map Argument [1..])) ++
         (zip @loc.upvalues $ map (\upval -> Field (Argument 0) (MSCIL.idToTypeSpec @loc.classname) (keyToId upval)) @loc.upvalues)
   | LamVal (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @lhs.env) @loc.upvalues
   | LamVal lhs.instr =
@@ -661,14 +660,15 @@ SEM CTm
   | FuncAppl lhs.locals = []
   | FuncAppl loc.funckey = asKey @func
   | FuncAppl loc.contkey = asKey @cont
-  | FuncAppl loc.argkey = asKey @arg
+  | FuncAppl loc.argkeys = map asKey @args
   | FuncAppl (loc.funcinstr, loc.funcmaxstack) = readEnv @lhs.env @loc.funckey
   | FuncAppl (loc.continstr, loc.contmaxstack) = readEnv @lhs.env @loc.contkey
-  | FuncAppl (loc.arginstr, loc.argmaxstack) = readEnv @lhs.env @loc.argkey
-  | FuncAppl loc.owner = functionBase MSCIL.Type_Object [MSCIL.Type_Object]
-  | FuncAppl loc.params = functionApplyParams MSCIL.Type_Object [MSCIL.Type_Object]
+  | FuncAppl (loc.arginstrs, loc.argmaxstacks) = unzip (map (readEnv @lhs.env) @loc.argkeys)
+  | FuncAppl loc.argTypes = map (const MSCIL.Type_Object) @args
+  | FuncAppl loc.owner = functionBase MSCIL.Type_Object @loc.argTypes
+  | FuncAppl loc.params = functionApplyParams MSCIL.Type_Object @loc.argTypes
   | FuncAppl lhs.instr =
-      @loc.funcinstr ++ @loc.continstr ++ @loc.arginstr ++
+      @loc.funcinstr ++ @loc.continstr ++ (concat @loc.arginstrs) ++
       [ MSCIL.instrTail
       , MSCIL.instrCallVirt MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.typeToTypeSpec @loc.owner) (MSCIL.stringToMethodName "Apply") @loc.params
       , MSCIL.instrRet
@@ -676,8 +676,8 @@ SEM CTm
   | FuncAppl lhs.maxstack =
       @loc.funcmaxstack `max`
       (@loc.contmaxstack + 1) `max`
-      (@loc.argmaxstack + 2) `max`
-      3
+      (foldr max 2 (zipWith (+) @loc.argmaxstacks [2..]))
+      
 
 ---
 -- Exit
@@ -858,13 +858,13 @@ SEM CTm
   | LetThunk lhs.freevars = (@binds.freevars `Set.union` @body.freevars) `Set.difference` @binds.boundvars
   | ContAppl lhs.freevars = Set.fromList [asKey @cont, asKey @val]
   | ThunkEval lhs.freevars = Set.fromList [asKey @thunk, asKey @cont]
-  | FuncAppl lhs.freevars = Set.fromList [asKey @func, asKey @cont, asKey @arg]
+  | FuncAppl lhs.freevars = Set.fromList ([asKey @func, asKey @cont] ++ (map asKey @args))
   | Exit lhs.freevars = Set.fromList [asKey @val]
   | Case lhs.freevars = @branches.freevars
 
 SEM CVal
   | IntVal StringVal lhs.freevars = Set.empty
-  | LamVal lhs.freevars = @body.freevars `Set.difference` (Set.fromList [asKey @bindcont, asKey @bindarg])
+  | LamVal lhs.freevars = @body.freevars `Set.difference` (Set.fromList (asKey @bindcont:map asKey @bindargs))
   | TagVal lhs.freevars = Set.fromList $ map asKey @args
   | FFIVal lhs.freevars = Set.fromList $ map asKey @args
 

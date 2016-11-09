@@ -65,12 +65,12 @@ SEM CVal
 --  | IntVal lhs.cTrf = @self
 --  | StringVal lhs.cTrf = @self
 SEM CVal
-  | LamVal (body.gUniq, loc.lUniq) = newUniq 2 @lhs.gUniq
+  | LamVal (body.gUniq, loc.lUniq) = newUniq (1 + length @bindargs) @lhs.gUniq
   | LamVal loc.newBindcont = trfContName @bindcont (@loc.lUniq !! 0)
-  | LamVal loc.newBindarg = trfThunkName @bindarg (@loc.lUniq !! 1)
+  | LamVal loc.newBindargs = zipWith trfThunkName @bindargs (tail @loc.lUniq)
   | LamVal body.contMap = Map.insert @bindcont @loc.newBindcont @lhs.contMap
-  | LamVal body.thunkMap = Map.insert @bindarg @loc.newBindarg @lhs.thunkMap
-  | LamVal lhs.cTrf = CVal_LamVal @loc.newBindcont @loc.newBindarg @body.cTrf
+  | LamVal body.thunkMap = (Map.fromList (zip @bindargs @loc.newBindargs)) `Map.union` @lhs.thunkMap
+  | LamVal lhs.cTrf = CVal_LamVal @loc.newBindcont @loc.newBindargs @body.cTrf
 SEM CVal
   | TagVal loc.newArgs = map (lookupThunkName @lhs.thunkMap) @args
   | TagVal lhs.cTrf = CVal_TagVal @tag @loc.newArgs
@@ -113,8 +113,8 @@ SEM CTm
 SEM CTm
   | FuncAppl loc.trfFunc = lookupValueName @lhs.valMap @func
   | FuncAppl loc.trfCont = lookupContName @lhs.contMap @cont
-  | FuncAppl loc.trfArg = lookupThunkName @lhs.thunkMap @arg
-  | FuncAppl lhs.cTrf = CTm_FuncAppl @loc.trfFunc @loc.trfCont @loc.trfArg
+  | FuncAppl loc.trfArgs = map (lookupThunkName @lhs.thunkMap) @args
+  | FuncAppl lhs.cTrf = CTm_FuncAppl @loc.trfFunc @loc.trfCont @loc.trfArgs
 
 SEM CTm
   | Exit loc.trfVal = lookupValueName @lhs.valMap @val

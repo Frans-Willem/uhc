@@ -26,7 +26,7 @@ ATTR CTm CVal CThunkBind CThunkBindL CCaseBranch CCaseBranchL CCasePattern [ | |
 ATTR CThunkBind CThunkBindL CCasePattern [ | | boundThunks USE {Set.union} {Set.empty} : {Set.Set ThunkName} ]
 
 SEM CVal
-  | LamVal lhs.freeThunks = Set.delete @bindarg @body.freeThunks
+  | LamVal lhs.freeThunks = @body.freeThunks `Set.difference` (Set.fromList @bindargs)
   | TagVal lhs.freeThunks = Set.fromList @args
 
 SEM CThunkBind
@@ -41,7 +41,7 @@ SEM CCaseBranch
 SEM CTm
   | LetThunk lhs.freeThunks = (@body.freeThunks `Set.union` @binds.freeThunks) `Set.difference` @binds.boundThunks
   | ThunkEval lhs.freeThunks = Set.singleton @thunk
-  | FuncAppl lhs.freeThunks = Set.singleton @arg
+  | FuncAppl lhs.freeThunks = Set.fromList @args
 %%]
 
 %%[(8 core)
