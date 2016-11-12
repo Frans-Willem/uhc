@@ -39,14 +39,13 @@ instance PP ValueName where
 %%[(8 core) ag
 ATTR CTm [ | | pp : {PP_Doc} ]
 SEM CTm
-  | LetVal lhs.pp
-      = (text "let val" >#< @bindname >#< text "=" >#< @bindvalue.pp)
-        >-< (text "in" >#< @body.pp)
   | LetCont lhs.pp
       = (text "let cont" >#< @contname >#< @valname >#< text "=" >#< @bindbody.pp)
         >-< (text "in" >#< @body.pp)
-  | LetThunk lhs.pp
-      = (text "let thunk" >#< @binds.pp) >-< (text "in" >#< @body.pp)
+  | Let lhs.pp
+      = (text "let" >#< @binds.pp) >-< (text "in" >#< @body.pp)
+  | LetFFI lhs.pp
+      = ((text "let ffi") >#< @valname >#< (text "=") >#< (foldr1 (>#<) (ppParens ((text $ show @instr) >#< (text "::") >#< (pp @ty)) : map pp @args))) >-< ((text "in") >#< @body.pp)
   | ContAppl lhs.pp = @cont >#< @val >#< text "(cont-appl)"
   | ThunkEval lhs.pp = @thunk >#< @cont >#< text "(thunk-eval)"
   | FuncAppl lhs.pp = @func >#< @cont >#< (ppSpaces @args) >#< text "(func-appl)"
@@ -55,10 +54,11 @@ SEM CTm
       (text "case" >#< @val >#< text "of") >-<
       indent 2 @branches.pp
 
-ATTR CThunkBindL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
-ATTR CThunkBind [ | | pp : {PP_Doc} ]
-SEM CThunkBind
-  | ThunkBind lhs.pp = @thunkname >#< @contname >#< (text "=") >#< @body.pp 
+ATTR CBindL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
+ATTR CBind [ | | pp : {PP_Doc} ]
+SEM CBind
+  | ThunkBind lhs.pp = (text "thunk") >#< @thunkname >#< @contname >#< (text "=") >#< @body.pp 
+  | ValBind lhs.pp = (text "val") >#< @valname >#< (text "=") >#< @value.pp
 
 ATTR CVal [ | | pp : {PP_Doc} ]
 SEM CVal
@@ -68,8 +68,6 @@ SEM CVal
       = text "(\\" >|< @bindcont >#< (ppSpaces @bindargs) >#< text "->" >#< @body.pp >|< text ")"
   | TagVal lhs.pp
       = text "#Tag" >#< ppSpaces ((pp @tag) : map pp @args)
-  | FFIVal lhs.pp
-      = text "FFI" >#< (foldr1 (>#<) (ppParens ((text $ show @instr) >#< (text "::") >#< (pp @ty)) : map pp @args))
 
 ATTR CCaseBranchL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
 ATTR CCasePattern [ | | pp : {PP_Doc} ]

@@ -295,7 +295,7 @@ unboxInstr ty =
 %%[(8 core) ag
 {- List of tags being used -}
 
-ATTR CTm CVal CThunkBind CThunkBindL CCaseBranch CCaseBranchL CCasePattern [ | | tags USE {Set.union} {Set.empty} : {Set.Set (CTag,Int)} ]
+ATTR CTm CVal CBind CBindL CCaseBranch CCaseBranchL CCasePattern [ | | tags USE {Set.union} {Set.empty} : {Set.Set (CTag,Int)} ]
 SEM CVal
   | TagVal lhs.tags = Set.singleton (@tag,length @args)
 SEM CCasePattern
@@ -306,103 +306,7 @@ ATTR CTm [ | | instr USE {++} {[]} : {MSCIL.MethodBodyItemL} ]
 ATTR CTm [ | | classes USE {++} {[]} : {MSCIL.DeclL} ]
 ATTR CTm [ localoffset : {Int} | | locals : {MSCIL.LocalL} ]
 ATTR CTm [ | | maxstack USE {max} {0} : {Int} ]
-----
--- LetVal
-----
-SEM CTm
-  | LetVal loc.valkey = asKey @bindname
-  | LetVal body.env = Map.insert @loc.valkey (Local @lhs.localoffset) @lhs.env
-  | LetVal lhs.instr =
-      @bindvalue.instr ++
-      [ MSCIL.instrStLoc @lhs.localoffset ] ++
-      @body.instr
-  | LetVal lhs.localoffset = @lhs.localoffset + 1
-  | LetVal lhs.locals = (keyToLocal @loc.valkey) : @body.locals
-  | LetVal bindvalue.name = @bindname
-ATTR CVal [ name : {ValueName} | | instr : {MSCIL.MethodBodyItemL} maxstack : {Int} ]
-ATTR CVal [ | | classes USE {++} {[]} : {MSCIL.DeclL} ]
-ATTR CVal [ env : {Environment} | | ]
-SEM CVal
-  | IntVal lhs.instr =
-      [ MSCIL.instrLdcI4 @value
-      , MSCIL.instrBox (MSCIL.typeToTypeSpec MSCIL.Type_NativeInt)
-      ]
-  | StringVal lhs.instr = [MSCIL.instrLdStr @value]
-  | IntVal StringVal lhs.maxstack = 1
-  | LamVal loc.classname = functionClassName @lhs.name
-  | LamVal loc.contkey = asKey @bindcont
-  | LamVal loc.thunkkeys = map asKey @bindargs
-  | LamVal loc.upvalues = Set.toList $ (@body.freevars `Set.difference` (Set.fromList (@loc.contkey : @loc.thunkkeys)))
-  | LamVal lhs.classes =
-      [ MSCIL.Decl_Class
-          ( MSCIL.classHeader
-            [MSCIL.ClassAttr_Public, MSCIL.ClassAttr_Auto, MSCIL.ClassAttr_Ansi]
-            @loc.classname
-            (map MSCIL.typeToTypeSpec [MSCIL.Type_Object, functionBase MSCIL.Type_Object (map (const MSCIL.Type_Object) @bindargs)])
-          )
-          (
-            (map (MSCIL.ClassMember_Field . keyToFieldDecl) @loc.upvalues)
-            ++
-            [ MSCIL.ClassMember_Method
-              ( MSCIL.ctorHeader (map keyToNamedParam @loc.upvalues) )
-              (
-                [  MSCIL.instrLdArg 0
-                , MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.typeToTypeSpec MSCIL.Type_Object) MSCIL.MethodName_Ctor []
-                ] ++
-                ( concat $ map
-                    (\(upval, index) -> 
-                      [ MSCIL.instrLdArg 0
-                      , MSCIL.instrLdArg index
-                      , MSCIL.instrStFld (keyToType upval) (MSCIL.idToTypeSpec @loc.classname) (keyToId upval)
-                      ]
-                    )
-                    (zip @loc.upvalues [1..])
-                ) ++ 
-                [ MSCIL.instrRet ]
-              )
-          , MSCIL.ClassMember_Method
-              ( MSCIL.methodHeader
-                [MSCIL.MethAttr_Public, MSCIL.MethAttr_Virtual, MSCIL.MethAttr_NewSlot]
-                (Just MSCIL.callConv_Instance)
-                MSCIL.Type_Void
-                (MSCIL.stringToMethodName "Apply")
-                ( keyToNamedParam @loc.contkey
-                : map keyToNamedParam @loc.thunkkeys
-                )
-              )
-              ( MSCIL.MethodBodyItem_MaxStack @body.maxstack
-              : MSCIL.MethodBodyItem_Locals False @body.locals
-              : @body.instr
-              )
-          ]
-        )
-      ] ++ @body.classes
-  | LamVal body.localoffset = 0
-  | LamVal body.env =
-      Map.fromList $
-        (zip (@loc.contkey : @loc.thunkkeys) (map Argument [1..])) ++
-        (zip @loc.upvalues $ map (\upval -> Field (Argument 0) (MSCIL.idToTypeSpec @loc.classname) (keyToId upval)) @loc.upvalues)
-  | LamVal (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @lhs.env) @loc.upvalues
-  | LamVal lhs.instr =
-      (concat @loc.upvalueinstr) ++
-      [ MSCIL.instrNewObj MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.idToTypeSpec @loc.classname) MSCIL.MethodName_Ctor (map keyToParam @loc.upvalues)
-      ]
-  | LamVal lhs.maxstack = foldr max (length @loc.upvalues) (zipWith (+) @loc.upvaluemaxstack [0..])
-SEM CVal
-  | TagVal loc.classname = tagClassName @tag $ length @args
-  | TagVal loc.argkey = map asKey @args
-  | TagVal (loc.arginstr, loc.argmaxstack) = unzip $ map (readEnv @lhs.env) @loc.argkey
-  | TagVal lhs.instr =
-      (concat @loc.arginstr) ++ 
-      [ MSCIL.instrNewObj MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.idToTypeSpec @loc.classname) MSCIL.MethodName_Ctor (map keyToParam @loc.argkey)
-      ]
-  | TagVal lhs.maxstack = foldr max (length @args) (zipWith (+) @loc.argmaxstack [0..])
-  | FFIVal (loc.argsty, loc.retty) = appUnArr @ty
-  | FFIVal loc.argkeys = map asKey @args
-  | FFIVal (loc.ffiinstr, loc.ffimaxstack) = FFI.parseFFI @instr (map (readEnv @lhs.env) @loc.argkeys)
-  | FFIVal lhs.instr = @loc.ffiinstr
-  | FFIVal lhs.maxstack = @loc.ffimaxstack
---  | FFIVal lhs.maxstack = foldr max (length @args `max` 1) (zipWith (+) @loc.argsmaxstack [0..])
+
 ----
 -- LetCont
 ----
@@ -411,7 +315,7 @@ SEM CTm
   | LetCont loc.valuekey = asKey @valname
   | LetCont lhs.locals = (keyToLocal @loc.contkey) : @body.locals
   | LetCont loc.target = @lhs.localoffset
-  | LetCont lhs.localoffset = @lhs.localoffset + 1
+  | LetCont body.localoffset = @lhs.localoffset + 1
   | LetCont loc.classname = continuationClassName @contname
   | LetCont loc.upvalues = Set.toList $ Set.delete @loc.valuekey @bindbody.freevars
   | LetCont loc.class =
@@ -471,36 +375,52 @@ SEM CTm
   | LetCont lhs.maxstack = foldl max @body.maxstack (zipWith (+) (@loc.upvaluemaxstack ++ [0]) [0..])
 
 ----
--- LetThunk
+-- LetFFI
 ----
 SEM CTm
-  | LetThunk lhs.locals = (map keyToLocal @binds.locals) ++ @body.locals
-  | LetThunk body.env = Map.union (Map.fromList $ zip @binds.locals $ map Local [@lhs.localoffset ..]) @lhs.env
-  | LetThunk body.localoffset = @lhs.localoffset + (length @binds.locals)
-  | LetThunk lhs.instr = @binds.allocinstr ++ @binds.fixupinstr ++ @body.instr
-  | LetThunk lhs.maxstack = foldr1 max [@binds.allocmaxstack, @binds.fixupmaxstack, @body.maxstack]
-  | LetThunk binds.recenv = Map.fromList $ zip @binds.locals $ map Local [@lhs.localoffset ..]
+  | LetFFI (loc.argsty, loc.retty) = appUnArr @ty
+  | LetFFI loc.valuekey = asKey @valname
+  | LetFFI loc.argkeys = map asKey @args
+  | LetFFI (loc.ffiinstr, loc.ffimaxstack) = FFI.parseFFI @instr (map (readEnv @lhs.env) @loc.argkeys)
+  | LetFFI loc.resultOffset = @lhs.localoffset
+  | LetFFI body.localoffset = @lhs.localoffset + 1
+  | LetFFI lhs.instr = @loc.ffiinstr ++ [ MSCIL.instrStLoc @loc.resultOffset ] ++ @body.instr
+  | LetFFI lhs.maxstack = @loc.ffimaxstack `max` @body.maxstack
+  | LetFFI body.env = Map.insert @loc.valuekey (Local @loc.resultOffset) @lhs.env
 
-ATTR CThunkBind [ | | local : {EnvironmentKey} ]
-ATTR CThunkBindL [ | | locals : {[EnvironmentKey]} ]
-SEM CThunkBindL
+----
+-- Let
+----
+SEM CTm
+  | Let lhs.locals = (map keyToLocal @binds.locals) ++ @body.locals
+  | Let body.env = Map.union (Map.fromList $ zip @binds.locals $ map Local [@lhs.localoffset ..]) @lhs.env
+  | Let body.localoffset = @lhs.localoffset + (length @binds.locals)
+  | Let lhs.instr = @binds.allocinstr ++ @binds.fixupinstr ++ @body.instr
+  | Let lhs.maxstack = foldr1 max [@binds.allocmaxstack, @binds.fixupmaxstack, @body.maxstack]
+  | Let binds.recenv = Map.fromList $ zip @binds.locals $ map Local [@lhs.localoffset ..]
+
+ATTR CBind [ | | local : {EnvironmentKey} ]
+ATTR CBindL [ | | locals : {[EnvironmentKey]} ]
+SEM CBindL
   | Nil lhs.locals = []
   | Cons lhs.locals = @hd.local : @tl.locals
-SEM CThunkBind
+SEM CBind
   | ThunkBind loc.classname = thunkClassName @thunkname
   | ThunkBind loc.thunkkey = asKey @thunkname
   | ThunkBind loc.contkey = asKey @contname
   | ThunkBind lhs.local = @loc.thunkkey
+  | ValBind loc.valuekey = asKey @valname
+  | ValBind lhs.local = @loc.valuekey
   
-ATTR CThunkBind CThunkBindL [ localoffset : {Int} | | ]
-SEM CThunkBindL
+ATTR CBind CBindL [ localoffset : {Int} | | ]
+SEM CBindL
   | Cons tl.localoffset = @lhs.localoffset + 1
 
-ATTR CThunkBind CThunkBindL [ env : {Environment} | | ]
-ATTR CThunkBind CThunkBindL [ recenv : {Environment} | | ]
-ATTR CThunkBind CThunkBindL [ | | allocinstr USE {++} {[]} : {MSCIL.MethodBodyItemL} allocmaxstack USE {max} {0} : {Int} ]
-ATTR CThunkBind CThunkBindL [ | | classes USE {++} {[]} : {MSCIL.DeclL} ]
-SEM CThunkBind
+ATTR CBind CBindL [ env : {Environment} | | ]
+ATTR CBind CBindL [ recenv : {Environment} | | ]
+ATTR CBind CBindL [ | | allocinstr USE {++} {[]} : {MSCIL.MethodBodyItemL} allocmaxstack USE {max} {0} : {Int} ]
+ATTR CBind CBindL [ | | classes USE {++} {[]} : {MSCIL.DeclL} ]
+SEM CBind
   | ThunkBind loc.upvalues = @body.freevars `Set.difference` (Set.fromList [@loc.thunkkey, @loc.contkey])
   | ThunkBind loc.nonrecupvalues = Set.toList $ @loc.upvalues `Set.difference` (Map.keysSet @lhs.recenv)
   | ThunkBind loc.recupvalues = Set.toList $ @loc.upvalues `Set.intersection` (Map.keysSet @lhs.recenv)
@@ -599,8 +519,8 @@ SEM CThunkBind
         (@loc.contkey, Argument 1) :
         (zip @loc.allupvalues $ map ((Field (Argument 0) (MSCIL.idToTypeSpec @loc.classname)) . keyToId) @loc.allupvalues)
 
-ATTR CThunkBind CThunkBindL [ | | fixupinstr USE {++} {[]} : {MSCIL.MethodBodyItemL} fixupmaxstack USE {max} {0} : {Int} ]
-SEM CThunkBind
+ATTR CBind CBindL [ | | fixupinstr USE {++} {[]} : {MSCIL.MethodBodyItemL} fixupmaxstack USE {max} {0} : {Int} ]
+SEM CBind
   | ThunkBind (loc.recupvalinstr, loc.recupvalmaxstack) = unzip $ map (readEnv @lhs.recenv) @loc.recupvalues
   | ThunkBind lhs.fixupinstr = 
       [ MSCIL.instrLdLoc @lhs.localoffset ] ++
@@ -608,6 +528,134 @@ SEM CThunkBind
       [ MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.idToTypeSpec @loc.classname) (MSCIL.stringToMethodName "Fixup") (map keyToParam @loc.recupvalues) ]
   | ThunkBind lhs.fixupmaxstack = foldl max ((length @loc.recupvalues) + 1) (zipWith (+) @loc.recupvalmaxstack [1..])
 
+
+SEM CBind
+  | ValBind value.name = @valname
+
+ATTR CVal [ localoffset : {Int} | | ]
+ATTR CVal [ name : {ValueName} | | allocinstr : {MSCIL.MethodBodyItemL} allocmaxstack : {Int} ]
+ATTR CVal [ | | fixupinstr : {MSCIL.MethodBodyItemL} fixupmaxstack : {Int} ]
+ATTR CVal [ | | classes USE {++} {[]} : {MSCIL.DeclL} ]
+ATTR CVal [ env : {Environment} | | ]
+ATTR CVal [ recenv : {Environment} | | ]
+SEM CVal
+  | IntVal lhs.allocinstr =
+      [ MSCIL.instrLdcI4 @value
+      , MSCIL.instrBox (MSCIL.typeToTypeSpec MSCIL.Type_NativeInt)
+      , MSCIL.instrStLoc @lhs.localoffset
+      ]
+  | StringVal lhs.allocinstr =
+      [ MSCIL.instrLdStr @value
+      , MSCIL.instrStLoc @lhs.localoffset
+      ]
+  | IntVal StringVal lhs.allocmaxstack = 1
+  | IntVal StringVal lhs.fixupinstr = []
+  | IntVal StringVal lhs.fixupmaxstack = 0
+  | LamVal loc.classname = functionClassName @lhs.name
+  | LamVal loc.contkey = asKey @bindcont
+  | LamVal loc.thunkkeys = map asKey @bindargs
+  | LamVal loc.upvalues = (@body.freevars `Set.difference` (Set.fromList (@loc.contkey : @loc.thunkkeys)))
+  | LamVal loc.allupvalues = Set.toList @loc.upvalues
+  | LamVal loc.recupvalues = Set.toList (@loc.upvalues `Set.intersection` (Map.keysSet @lhs.recenv))
+  | LamVal loc.nonrecupvalues = Set.toList (@loc.upvalues `Set.difference` (Map.keysSet @lhs.recenv))
+  | LamVal lhs.classes =
+      [ MSCIL.Decl_Class
+          ( MSCIL.classHeader
+            [MSCIL.ClassAttr_Public, MSCIL.ClassAttr_Auto, MSCIL.ClassAttr_Ansi]
+            @loc.classname
+            (map MSCIL.typeToTypeSpec [MSCIL.Type_Object, functionBase MSCIL.Type_Object (map (const MSCIL.Type_Object) @bindargs)])
+          )
+          (
+            (map (MSCIL.ClassMember_Field . keyToFieldDecl) @loc.allupvalues)
+            ++
+            [ MSCIL.ClassMember_Method
+              ( MSCIL.ctorHeader (map keyToNamedParam @loc.nonrecupvalues) )
+              (
+                [  MSCIL.instrLdArg 0
+                , MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.typeToTypeSpec MSCIL.Type_Object) MSCIL.MethodName_Ctor []
+                ] ++
+                ( concat $ map
+                    (\(upval, index) -> 
+                      [ MSCIL.instrLdArg 0
+                      , MSCIL.instrLdArg index
+                      , MSCIL.instrStFld (keyToType upval) (MSCIL.idToTypeSpec @loc.classname) (keyToId upval)
+                      ]
+                    )
+                    (zip @loc.nonrecupvalues [1..])
+                ) ++ 
+                [ MSCIL.instrRet ]
+              )
+          , MSCIL.ClassMember_Method
+              ( MSCIL.methodHeader
+                [MSCIL.MethAttr_Public]
+                (Just MSCIL.callConv_Instance)
+                MSCIL.Type_Void
+                (MSCIL.stringToMethodName "Fixup")
+                (map keyToNamedParam @loc.recupvalues)
+              )
+              (
+                ( concat $ map
+                    (\(upval, index) -> 
+                      [ MSCIL.instrLdArg 0
+                      , MSCIL.instrLdArg index
+                      , MSCIL.instrStFld (keyToType upval) (MSCIL.idToTypeSpec @loc.classname) (keyToId upval)
+                      ]
+                    )
+                    (zip @loc.recupvalues [1..])
+                ) ++ 
+                [ MSCIL.instrRet ]
+              )
+          , MSCIL.ClassMember_Method
+              ( MSCIL.methodHeader
+                [MSCIL.MethAttr_Public, MSCIL.MethAttr_Virtual, MSCIL.MethAttr_NewSlot]
+                (Just MSCIL.callConv_Instance)
+                MSCIL.Type_Void
+                (MSCIL.stringToMethodName "Apply")
+                ( keyToNamedParam @loc.contkey
+                : map keyToNamedParam @loc.thunkkeys
+                )
+              )
+              ( MSCIL.MethodBodyItem_MaxStack @body.maxstack
+              : MSCIL.MethodBodyItem_Locals False @body.locals
+              : @body.instr
+              )
+          ]
+        )
+      ] ++ @body.classes
+  | LamVal body.localoffset = 0
+  | LamVal body.env =
+      Map.fromList $
+        (zip (@loc.contkey : @loc.thunkkeys) (map Argument [1..])) ++
+        (zip @loc.allupvalues $ map (\upval -> Field (Argument 0) (MSCIL.idToTypeSpec @loc.classname) (keyToId upval)) @loc.allupvalues)
+  | LamVal (loc.nonrecupvalueinstr, loc.nonrecupvaluemaxstack) = unzip $ map (readEnv @lhs.env) @loc.nonrecupvalues
+  | LamVal lhs.allocinstr =
+      (concat @loc.nonrecupvalueinstr) ++
+      [ MSCIL.instrNewObj MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.idToTypeSpec @loc.classname) MSCIL.MethodName_Ctor (map keyToParam @loc.nonrecupvalues)
+      , MSCIL.instrStLoc @lhs.localoffset
+      ]
+  | LamVal lhs.allocmaxstack = foldr max (length @loc.nonrecupvalues) (zipWith (+) @loc.nonrecupvaluemaxstack [0..])
+  | LamVal (loc.recupvalueinstr, loc.recupvaluemaxstack) = unzip $ map (readEnv @lhs.recenv) @loc.recupvalues
+  | LamVal lhs.fixupinstr =
+      [ MSCIL.instrLdLoc @lhs.localoffset ] ++
+      (concat @loc.recupvalueinstr) ++
+      [ MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.idToTypeSpec @loc.classname) (MSCIL.stringToMethodName "Fixup") (map keyToParam @loc.recupvalues) ]
+  | LamVal lhs.fixupmaxstack = foldr max ((length @loc.recupvalues) + 1) (zipWith (+) @loc.recupvaluemaxstack [1..])
+    
+SEM CVal
+  | TagVal loc.classname = tagClassName @tag $ length @args
+  | TagVal loc.argkey = map asKey @args
+  | TagVal (loc.arginstr, loc.argmaxstack) = unzip $ map (readEnv (@lhs.recenv `Map.union` @lhs.env)) @loc.argkey
+  | TagVal lhs.allocinstr =
+      [ MSCIL.instrNewObj MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.idToTypeSpec @loc.classname) MSCIL.MethodName_Ctor []
+      , MSCIL.instrStLoc @lhs.localoffset
+      ]
+  | TagVal lhs.allocmaxstack = 1
+  | TagVal lhs.fixupinstr = 
+      [ MSCIL.instrLdLoc @lhs.localoffset ] ++
+      (concat @loc.arginstr) ++
+      [ MSCIL.instrCall MSCIL.callConv_Instance MSCIL.Type_Void (Just $ MSCIL.idToTypeSpec @loc.classname) (MSCIL.stringToMethodName "Fixup") (map keyToParam @loc.argkey) ]
+      
+  | TagVal lhs.fixupmaxstack = foldr max ((length @args) + 1) (zipWith (+) @loc.argmaxstack [1..])
 ----
 -- ContAppl
 ----
@@ -696,7 +744,7 @@ SEM CTm
 ----
 -- Case
 ----
-ATTR CTm CVal CCaseBranch CCaseBranchL CThunkBind CThunkBindL [ | caseNumber : {Int} | ]
+ATTR CTm CVal CCaseBranch CCaseBranchL CBind CBindL [ | caseNumber : {Int} | ]
 SEM CTm
   | Case loc.valenv = asKey @val
   | Case loc.currentNumber = @lhs.caseNumber
@@ -708,7 +756,7 @@ SEM CTm
 --      if @branches.needlocal
 --        then [MSCIL.Variable_Variable MSCIL.Type_Object Nothing]
 --        else []
-  | Case branches.templocal = @lhs.localoffset
+--  | Case branches.templocal = @lhs.localoffset
   | Case lhs.classes =
       (
         MSCIL.Decl_Class
@@ -850,12 +898,12 @@ SEM CCasePattern
 ----
 -- Should go in a shared AG file.
 ATTR CTm CVal [ | | freevars : {Set.Set EnvironmentKey} ]
-ATTR CThunkBind CThunkBindL [ | | freevars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} boundvars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} ]
+ATTR CBind CBindL [ | | freevars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} boundvars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} ]
 SEM CTm
-  | LetVal lhs.freevars = @bindvalue.freevars `Set.union` (Set.delete (asKey @bindname) @body.freevars)
   | LetCont lhs.freevars = (Set.delete @loc.valuekey @bindbody.freevars) `Set.union` (Set.delete @loc.contkey @body.freevars)
+  | LetFFI lhs.freevars = (Set.delete @loc.valuekey @body.freevars) `Set.union` (Set.fromList $ map asKey @args)
   -- Let op, alleen let thunk kan recursief zijn eigen binds zien.
-  | LetThunk lhs.freevars = (@binds.freevars `Set.union` @body.freevars) `Set.difference` @binds.boundvars
+  | Let lhs.freevars = (@binds.freevars `Set.union` @body.freevars) `Set.difference` @binds.boundvars
   | ContAppl lhs.freevars = Set.fromList [asKey @cont, asKey @val]
   | ThunkEval lhs.freevars = Set.fromList [asKey @thunk, asKey @cont]
   | FuncAppl lhs.freevars = Set.fromList ([asKey @func, asKey @cont] ++ (map asKey @args))
@@ -866,11 +914,12 @@ SEM CVal
   | IntVal StringVal lhs.freevars = Set.empty
   | LamVal lhs.freevars = @body.freevars `Set.difference` (Set.fromList (asKey @bindcont:map asKey @bindargs))
   | TagVal lhs.freevars = Set.fromList $ map asKey @args
-  | FFIVal lhs.freevars = Set.fromList $ map asKey @args
 
-SEM CThunkBind
+SEM CBind
   | ThunkBind lhs.boundvars = Set.fromList [asKey @thunkname]
   | ThunkBind lhs.freevars = Set.delete (asKey @contname) @body.freevars
+  | ValBind lhs.boundvars = Set.singleton (asKey @valname)
+  | ValBind lhs.freevars = @value.freevars
 
 ATTR CCasePattern [ | | boundvars : {Set.Set EnvironmentKey} ]
 SEM CCasePattern

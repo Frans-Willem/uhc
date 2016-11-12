@@ -67,7 +67,7 @@ ATTR CExpr CBind CBound CBindL CBoundL CAlt CAltL CPat [ | cpsFreshContCounter :
 SEM CExpr
   | Let loc.isStrict = @categ == CBindCateg_Strict
 {- cpsContent is only used in let strict -}
-  | Let binds.cpsContent = CPS.CTm_LetThunk @binds.cpsStrictBinds @body.cpsTrans
+  | Let binds.cpsContent = CPS.CTm_Let @binds.cpsStrictBinds @body.cpsTrans
   | Let binds.cpsScheme =
       if @loc.isStrict then CPSTranslationScheme_Value else CPSTranslationScheme_ContinuationCall
   | Let lhs.cpsTrans =
@@ -75,17 +75,17 @@ SEM CExpr
       then
         @binds.cpsTrans
       else
-        CPS.CTm_LetThunk @binds.cpsBinds @body.cpsTrans
+        CPS.CTm_Let @binds.cpsBinds @body.cpsTrans
 
-ATTR CBindL [ | | cpsBinds USE {:} {[]} : {CPS.CThunkBindL} ]
-ATTR CBindL [ | | cpsStrictBinds USE {:} {[]} : {CPS.CThunkBindL}]
+ATTR CBindL [ | | cpsBinds USE {:} {[]} : {CPS.CBindL} ]
+ATTR CBindL [ | | cpsStrictBinds USE {:} {[]} : {CPS.CBindL}]
 SEM CBindL
   | Nil lhs.cpsTrans = @lhs.cpsContent
   | Cons hd.cpsContent = @tl.cpsTrans
   | Cons lhs.cpsTrans = @hd.cpsTrans
 
 ATTR CBind [ | | cpsBindName : {CPS.ThunkName} ]
-ATTR CBind [ | | cpsBinds : {CPS.CThunkBind} cpsStrictBinds : {CPS.CThunkBind} ]
+ATTR CBind [ | | cpsBinds : {CPS.CBind} cpsStrictBinds : {CPS.CBind} ]
 {- Fresh continuation variable -}
 SEM CBind
   | Bind loc.cpsContCounter : UNIQUEREF cpsFreshContCounter
@@ -95,12 +95,12 @@ SEM CBind
   | Bind bindAspects.cpsContName = @loc.cpsContName
   | Bind loc.cpsBindName = createThunkName @nm
   | Bind lhs.cpsBinds =
-      CPS.CThunkBind_ThunkBind
+      CPS.CBind_ThunkBind
         @loc.cpsBindName
         @loc.cpsContName
         @bindAspects.cpsTrans
   | Bind lhs.cpsStrictBinds =
-      CPS.CThunkBind_ThunkBind
+      CPS.CBind_ThunkBind
         @loc.cpsBindName
         @loc.cpsContName
         (CPS.CTm_ContAppl @loc.cpsContName @bindAspects.cpsValueName)
@@ -173,7 +173,8 @@ SEM CExpr
   | Lam body.lamWrapperCont = @loc.cpsLamWrapperContName
   | Lam loc.cpsLamWrapperValueNumber : UNIQUEREF cpsFreshValueCounter
   | Lam loc.cpsLamWrapperValueName = createFreshValueName @loc.cpsLamWrapperValueNumber
-  | Lam lhs.lamWrapper = CPS.CTm_LetVal @loc.cpsLamWrapperValueName @loc.cpsLamWrapperVal (CPS.CTm_ContAppl @lhs.lamWrapperCont @loc.cpsLamWrapperValueName)
+  | Lam lhs.lamWrapper =
+      CPS.CTm_Let [CPS.CBind_ValBind @loc.cpsLamWrapperValueName @loc.cpsLamWrapperVal] (CPS.CTm_ContAppl @lhs.lamWrapperCont @loc.cpsLamWrapperValueName)
   | Lam body.lamWrapperFunc =
       if @lhs.inLam
         then @lhs.lamWrapperFunc
@@ -213,14 +214,12 @@ SEM CExpr
         else @loc.cpsFinalValueName
   | Lam loc.cpsWrapLets =
       (\content ->
-        CPS.CTm_LetVal
-          @loc.cpsFinalValueName
-          @loc.cpsValue
+        CPS.CTm_Let
+          [CPS.CBind_ValBind @loc.cpsFinalValueName @loc.cpsValue]
           ( if (length @loc.lamArgs > 1)
               then
-                ( CPS.CTm_LetVal
-                  @loc.cpsLamWrapperValueName
-                  @loc.cpsLamWrapperVal
+                ( CPS.CTm_Let
+                  [CPS.CBind_ValBind @loc.cpsLamWrapperValueName @loc.cpsLamWrapperVal]
                   content
                 )
               else
@@ -238,8 +237,8 @@ SEM CExpr
               @loc.cpsWrapLets
                 (CPS.CTm_ContAppl @lhs.cpsContName @loc.cpsValueName)
             CPSTranslationScheme_Thunk ->
-              CPS.CTm_LetThunk
-                [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsThunkContName
+              CPS.CTm_Let
+                [CPS.CBind_ThunkBind @loc.cpsThunkName @loc.cpsThunkContName
                   (
                     @loc.cpsWrapLets
                       (
@@ -309,8 +308,8 @@ SEM CExpr
             CPSTranslationScheme_Value -> @func.cpsTrans
             CPSTranslationScheme_ContinuationCall -> @func.cpsTrans
             CPSTranslationScheme_Thunk ->
-              CPS.CTm_LetThunk
-                [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsAppContName @func.cpsTrans]
+              CPS.CTm_Let
+                [CPS.CBind_ThunkBind @loc.cpsThunkName @loc.cpsAppContName @func.cpsTrans]
                 @lhs.cpsContent
 
 {- Integer & String transformation -}
@@ -326,11 +325,11 @@ SEM CExpr
   | Int String lhs.cpsTrans =
       case @lhs.cpsScheme of
         CPSTranslationScheme_Value ->
-          CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue @lhs.cpsContent
+          CPS.CTm_Let [CPS.CBind_ValBind @loc.cpsValueName @loc.cpsValue] @lhs.cpsContent
         CPSTranslationScheme_ContinuationCall ->
-          CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue (CPS.CTm_ContAppl @lhs.cpsContName @loc.cpsValueName)
+          CPS.CTm_Let [CPS.CBind_ValBind @loc.cpsValueName @loc.cpsValue] (CPS.CTm_ContAppl @lhs.cpsContName @loc.cpsValueName)
         CPSTranslationScheme_Thunk ->
-          CPS.CTm_LetThunk [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsFreshContName (CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue (CPS.CTm_ContAppl @loc.cpsFreshContName @loc.cpsValueName))] @lhs.cpsContent
+          CPS.CTm_Let [CPS.CBind_ThunkBind @loc.cpsThunkName @loc.cpsFreshContName (CPS.CTm_Let [CPS.CBind_ValBind @loc.cpsValueName @loc.cpsValue] (CPS.CTm_ContAppl @loc.cpsFreshContName @loc.cpsValueName))] @lhs.cpsContent
 
 {- Tag transformation -}
 ATTR CExpr [ tagArgs : {[CPS.ThunkName]} | | isTag : {Bool} ]
@@ -348,11 +347,11 @@ SEM CExpr
   | Tup lhs.cpsTrans =
       case @lhs.cpsScheme of
         CPSTranslationScheme_Value ->
-          CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue @lhs.cpsContent
+          CPS.CTm_Let [CPS.CBind_ValBind @loc.cpsValueName @loc.cpsValue] @lhs.cpsContent
         CPSTranslationScheme_ContinuationCall ->
-          CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue (CPS.CTm_ContAppl @lhs.cpsContName @loc.cpsValueName)
+          CPS.CTm_Let [CPS.CBind_ValBind @loc.cpsValueName @loc.cpsValue] (CPS.CTm_ContAppl @lhs.cpsContName @loc.cpsValueName)
         CPSTranslationScheme_Thunk ->
-          CPS.CTm_LetThunk [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsFreshContName (CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue (CPS.CTm_ContAppl @loc.cpsFreshContName @loc.cpsValueName))] @lhs.cpsContent
+          CPS.CTm_Let [CPS.CBind_ThunkBind @loc.cpsThunkName @loc.cpsFreshContName (CPS.CTm_Let [CPS.CBind_ValBind @loc.cpsValueName @loc.cpsValue] (CPS.CTm_ContAppl @loc.cpsFreshContName @loc.cpsValueName))] @lhs.cpsContent
 
 SEM CBound
   | Val expr.tagArgs = []
@@ -383,8 +382,8 @@ SEM CExpr
         CPSTranslationScheme_Value ->
           CPS.CTm_LetCont @loc.cpsFreshContName @loc.cpsValueName @lhs.cpsContent @expr.cpsTrans
         CPSTranslationScheme_Thunk ->
-          CPS.CTm_LetThunk
-            [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsFreshContName @expr.cpsTrans]
+          CPS.CTm_Let
+            [CPS.CBind_ThunkBind @loc.cpsThunkName @loc.cpsFreshContName @expr.cpsTrans]
             @lhs.cpsContent
         CPSTranslationScheme_ContinuationCall ->
           @expr.cpsTrans
@@ -410,9 +409,9 @@ SEM CPat
   | Var loc.cpsFreshContName = createFreshContName @loc.cpsFreshContNumber
 
   | Var lhs.cpsTrans =
-      CPS.CTm_LetThunk
+      CPS.CTm_Let
         [
-          CPS.CThunkBind_ThunkBind
+          CPS.CBind_ThunkBind
             (createThunkName @pnm)
             @loc.cpsFreshContName
           (CPS.CTm_ContAppl @loc.cpsFreshContName @lhs.cpsValueName)
@@ -442,15 +441,14 @@ SEM CExpr
   | FFI loc.cpsThunkName = createFreshThunkName @loc.cpsThunkNumber
   | FFI loc.cpsFreshContNumber : UNIQUEREF cpsFreshContCounter
   | FFI loc.cpsFreshContName = createFreshContName @loc.cpsFreshContNumber
-  | FFI loc.cpsValue = CPS.CVal_FFIVal @impEnt @lhs.ffiArgs @ty
   | FFI lhs.cpsTrans =
       case @lhs.cpsScheme of
         CPSTranslationScheme_Value ->
-          CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue @lhs.cpsContent
+          CPS.CTm_LetFFI @loc.cpsValueName @impEnt @lhs.ffiArgs @ty @lhs.cpsContent
         CPSTranslationScheme_ContinuationCall ->
-          CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue (CPS.CTm_ContAppl @lhs.cpsContName @loc.cpsValueName)
+          CPS.CTm_LetFFI @loc.cpsValueName @impEnt @lhs.ffiArgs @ty (CPS.CTm_ContAppl @lhs.cpsContName @loc.cpsValueName)
         CPSTranslationScheme_Thunk ->
-          CPS.CTm_LetThunk [CPS.CThunkBind_ThunkBind @loc.cpsThunkName @loc.cpsFreshContName (CPS.CTm_LetVal @loc.cpsValueName @loc.cpsValue (CPS.CTm_ContAppl @loc.cpsFreshContName @loc.cpsValueName))] @lhs.cpsContent
+          CPS.CTm_Let [CPS.CBind_ThunkBind @loc.cpsThunkName @loc.cpsFreshContName (CPS.CTm_LetFFI @loc.cpsValueName @impEnt @lhs.ffiArgs @ty (CPS.CTm_ContAppl @loc.cpsFreshContName @loc.cpsValueName))] @lhs.cpsContent
 
 SEM CBound
   | Val expr.ffiArgs = []

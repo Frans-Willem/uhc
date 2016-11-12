@@ -14,16 +14,16 @@ DATA CVal
   | TagVal
       tag : {CTag}
       args: {[ThunkName]}
-  | FFIVal
-      instr : {String}
-      args: {[ValueName]}
-      ty : {Ty}
-DATA CThunkBind
+
+DATA CBind
   | ThunkBind
       thunkname : {ThunkName}
       contname : {ContName}
       body : CTm
-TYPE CThunkBindL = [CThunkBind]
+  | ValBind
+      valname : {ValueName}
+      value : CVal
+TYPE CBindL = [CBind]
 
 DATA CCasePattern
   | Default
@@ -40,17 +40,19 @@ DATA CCaseBranch
 TYPE CCaseBranchL = [CCaseBranch]
 
 DATA CTm
-  | LetVal
-      bindname : {ValueName}
-      bindvalue : CVal
-      body : CTm
   | LetCont
       contname : {ContName}
       valname : {ValueName}
       bindbody : CTm
       body : CTm
-  | LetThunk
-     binds : CThunkBindL 
+  | LetFFI
+      valname : {ValueName}
+      instr : {String}
+      args : {[ValueName]}
+      ty : {Ty}
+      body : CTm
+  | Let
+     binds : CBindL 
      body : CTm
   | ContAppl
       cont : {ContName}

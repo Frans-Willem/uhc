@@ -22,15 +22,18 @@ ctmTrfUnrec ctm
 %%]
 
 %%[(8 core)
-ATTR CTm CVal CThunkBind CThunkBindL CCaseBranch CCaseBranchL CCasePattern [ | | freeThunks USE {Set.union} {Set.empty}: {Set.Set ThunkName} ]
-ATTR CThunkBind CThunkBindL CCasePattern [ | | boundThunks USE {Set.union} {Set.empty} : {Set.Set ThunkName} ]
+ATTR CTm CVal CBind CBindL CCaseBranch CCaseBranchL CCasePattern [ | | freeThunks USE {Set.union} {Set.empty}: {Set.Set ThunkName} ]
+ATTR CTm CVal CBind CBindL CCaseBranch CCaseBranchL CCasePattern [ | | freeVals USE {Set.union} {Set.empty} : {Set.Set ValueName} ]
+ATTR CBind CBindL CCasePattern [ | | boundThunks USE {Set.union} {Set.empty} : {Set.Set ThunkName} ]
+ATTR CBind CBindL CCasePattern [ | | boundVals USE {Set.union} {Set.empty} : {Set.Set ValueName} ]
 
 SEM CVal
   | LamVal lhs.freeThunks = @body.freeThunks `Set.difference` (Set.fromList @bindargs)
   | TagVal lhs.freeThunks = Set.fromList @args
 
-SEM CThunkBind
+SEM CBind
   | ThunkBind lhs.boundThunks = Set.singleton @thunkname
+  | ValBind lhs.boundVals = Set.singleton @valname
 
 SEM CCasePattern
   | Tag lhs.boundThunks = Set.fromList (@args ++ (maybeToList @rest))
@@ -39,30 +42,41 @@ SEM CCaseBranch
   | CaseBranch lhs.freeThunks = @body.freeThunks `Set.difference` @pat.boundThunks
 
 SEM CTm
-  | LetThunk lhs.freeThunks = (@body.freeThunks `Set.union` @binds.freeThunks) `Set.difference` @binds.boundThunks
+  | Let lhs.freeThunks = (@body.freeThunks `Set.union` @binds.freeThunks) `Set.difference` @binds.boundThunks
+  | Let lhs.freeVals = (@body.freeVals `Set.union` @binds.freeVals) `Set.difference` @binds.boundVals
+  | LetFFI lhs.freeVals = Set.fromList @args `Set.union` (Set.delete @valname @body.freeVals)
+  | ContAppl lhs.freeVals = Set.singleton @val
   | ThunkEval lhs.freeThunks = Set.singleton @thunk
   | FuncAppl lhs.freeThunks = Set.fromList @args
+  | FuncAppl lhs.freeVals = Set.singleton @func
+  | Exit lhs.freeVals = Set.singleton @val
+  | Case lhs.freeVals = (Set.singleton @val) `Set.union` @branches.freeVals
 %%]
 
 %%[(8 core)
-ATTR CThunkBind CThunkBindL [ | | thunkMap USE {Map.unionWith Set.union} {Map.empty} : {Map.Map ThunkName (Set.Set ThunkName)} ]
-SEM CThunkBind
-  | ThunkBind lhs.thunkMap = Map.singleton @thunkname @body.freeThunks
+ATTR CBind CBindL [ | | refMap USE {Map.unionWith Set.union} {Map.empty} : {Map.Map (Either ThunkName ValueName) (Set.Set (Either ThunkName ValueName))} ]
+SEM CBind
+  | ThunkBind loc.freeBoth = (Set.map Left @body.freeThunks) `Set.union` (Set.map Right @body.freeVals)
+  | ThunkBind lhs.refMap = Map.singleton (Left @thunkname) @loc.freeBoth
+  | ValBind loc.freeBoth = (Set.map Left @value.freeThunks) `Set.union` (Set.map Right @value.freeVals)
+  | ValBind lhs.refMap = Map.singleton (Right @valname) @loc.freeBoth
 
-ATTR CThunkBind CThunkBindL [ | | bindMap USE {Map.union} {Map.empty} : {Map.Map ThunkName CThunkBind} ]
-SEM CThunkBind
-  | ThunkBind lhs.bindMap = Map.singleton @thunkname (CThunkBind_ThunkBind @thunkname @contname @body.cTrf)
+ATTR CBind CBindL [ | | bindMap USE {Map.union} {Map.empty} : {Map.Map (Either ThunkName ValueName) CBind} ]
+SEM CBind
+  | ThunkBind lhs.bindMap = Map.singleton (Left @thunkname) (CBind_ThunkBind @thunkname @contname @body.cTrf)
+  | ValBind lhs.bindMap = Map.singleton (Right @valname) (CBind_ValBind @valname @value.cTrf)
 %%]
 
 
 %%[(8 core)
-ATTR CTm CVal CThunkBind CThunkBindL CCaseBranch CCaseBranchL CCasePattern [ | | cTrf : SELF ]
+ATTR CTm CVal CBind CBindL CCaseBranch CCaseBranchL CCasePattern [ | | cTrf : SELF ]
 
 SEM CTm
-  | LetThunk loc.truncatedThunkMap = Map.map (Set.intersection @binds.boundThunks) @binds.thunkMap
-  | LetThunk loc.flattenedThunkMap = Map.toList (Map.map Set.toList @loc.truncatedThunkMap)
-  | LetThunk loc.scc = scc @loc.flattenedThunkMap
-  | LetThunk lhs.cTrf = foldr (\binds -> CTm_LetThunk (catMaybes $ map (\bind -> Map.lookup bind @binds.bindMap) binds)) @body.cTrf @loc.scc
+  | Let loc.boundBoth = (Set.map Left @binds.boundThunks) `Set.union` (Set.map Right @binds.boundVals)
+  | Let loc.truncatedRefMap = Map.map (Set.intersection @loc.boundBoth) @binds.refMap
+  | Let loc.flattenedRefMap = Map.toList (Map.map Set.toList @loc.truncatedRefMap)
+  | Let loc.scc = scc @loc.flattenedRefMap
+  | Let lhs.cTrf = foldr (\binds -> CTm_Let (catMaybes $ map (\bind -> Map.lookup bind @binds.bindMap) binds)) @body.cTrf @loc.scc
 
 
 %%]
