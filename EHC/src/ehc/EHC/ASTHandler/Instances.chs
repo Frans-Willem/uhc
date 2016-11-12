@@ -84,9 +84,6 @@
 -- CoreCPS output
 %%[(8 core) import({%{EH}CoreCPS} as CoreCPS, {%{EH}CoreCPS.Pretty} as CoreCPSPretty)
 %%]
--- LuaBC output
-%%[(8 core) import({%{EH}LuaBC} as LuaBC, {%{EH}LuaBC.Pretty} as LuaBCPretty)
-%%]
 -- MSCIL output
 %%[(8 core) import({%{EH}MSCIL} as MSCIL, {%{EH}MSCIL.Pretty} as MSCILPretty)
 %%]
@@ -542,27 +539,6 @@ astHandler'_CoreCPS =
 			, _asthdlrMkOutputFPath           = \opts m f suff -> mkPerModuleOutputFPath opts True m f suff
             , _asthdlrPretty			= \opts ecu ast -> Just $
 					let ppMod = CoreCPSPretty.ppCTm ast
-					in  "//" >#< ecuModNm ecu >-< ppMod
-			}
-%%]
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%% ASTHandler': LuaBC
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-%%[(8 core) export(astHandler'_LuaBC)
-astHandler'_LuaBC :: ASTHandler' AST_LuaBC
-astHandler'_LuaBC = 
-  emptyASTHandler'
-			{ _asthdlrName              = "LuaBC"
-            , _asthdlrASTLens           = Just ecuMbLuaBC
-            , _asthdlrSuffixRel			= mkASTSuffixRel
-            								[ ( (ASTFileContent_Text	, ASTFileUse_Target)		, ("luabc", ecuMbLuaBC, Nothing) )
-            								]
-			, _asthdlrEcuStore          = ecuStoreLuaBC
-			, _asthdlrMkOutputFPath           = \opts m f suff -> mkPerModuleOutputFPath opts True m f suff
-            , _asthdlrPretty			= \opts ecu ast -> Just $
-					let ppMod = LuaBCPretty.ppCChunk ast
 					in  "//" >#< ecuModNm ecu >-< ppMod
 			}
 %%]

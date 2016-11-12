@@ -80,8 +80,6 @@ level 2..6 : with prefix 'cpEhc'
 %%]
 %%[(8 codegen javascript) import({%{EH}EHC.CompilePhase.CompileJavaScript})
 %%]
-%%[(8 core) import({%{EH}EHC.CompilePhase.CompileLuaBC})
-%%]
 %%[(8 core) import({%{EH}EHC.CompilePhase.CompileMSCIL})
 %%]
 %%[99 import({%{EH}Base.PackageDatabase})
@@ -1202,7 +1200,6 @@ cpEhcExecutablePerModule how impModNmL modNm
               ]
 %%]]
 %%[[(8 core)
-           ++ [ cpCompileLuaBC how impModNmL modNm ]
            ++ [ cpCompileMSCIL how impModNmL modNm ]
 %%]]
        }
@@ -1528,20 +1525,10 @@ cpProcessCoreCPSRest :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()
 cpProcessCoreCPSRest modNm
   = do { cr <- get
        ; let (_,_,opts,_) = crBaseInfo modNm cr
-       ; when (ehcOptIsLuaBC opts)
-              ( do { cpTranslateCoreCPS2LuaBC modNm
-                   ; cpProcessLuaBC modNm
-                   })
        ; when (ehcOptIsMSCIL opts)
               ( do { cpTranslateCoreCPS2MSCIL modNm
                    ; cpProcessMSCIL modNm
                    })
-       }
-
-cpProcessLuaBC :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()
-cpProcessLuaBC modNm
-  = do { cpMsg modNm VerboseALot "cpProcessLuaBC: dumping first stage"
-       ; void $ cpOutputLuaBC ASTFileContent_Text "-initial" modNm
        }
 
 cpProcessMSCIL :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()

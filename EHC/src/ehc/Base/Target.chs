@@ -110,7 +110,6 @@ data Target
   | Target_FullProgAnal_Grin_CLR			-- full program analysis on grin, generating for Common Language Runtime (.NET / Mono)
 
   -- cps, lua bytecode
-  | Target_Interpreter_CoreCPS_LuaBC       -- Lua bytecode based on CoreCPS, based on Core.
   | Target_Interpreter_CoreCPS_MSCIL       -- MSCIL based on CoreCPS, based on Core.
 %%]]
   deriving ( Eq, Ord, Enum )
@@ -137,7 +136,6 @@ instance Show Target where
   show Target_FullProgAnal_Grin_JVM			= "jvm"
   show Target_Interpreter_Grin_C			= "bc"
   show Target_FullProgAnal_Grin_CLR			= "clr"
-  show Target_Interpreter_CoreCPS_LuaBC     = "luabc"
   show Target_Interpreter_CoreCPS_MSCIL = "mscil"
 %%]]
 %%]
@@ -198,7 +196,6 @@ supportedTargetMp :: Map.Map String Target
                  ++ [ mk Target_FullProgAnal_Grin_CLR [FFIWay_CCall] ]
 %%]]
 %%[[(8 core)
-                 ++ [ mk Target_Interpreter_CoreCPS_LuaBC [FFIWay_CCall] ]
                  ++ [ mk Target_Interpreter_CoreCPS_MSCIL [FFIWay_CCall] ]
 %%]]
           ]
@@ -471,14 +468,7 @@ targetIsOnUnixAndOrC t
 {-# INLINE targetIsOnUnixAndOrC #-}
 %%]
 
-%%[(8 core) export(targetIsLuaBC, targetIsMSCIL)
-targetIsLuaBC :: Target -> Bool
-targetIsLuaBC t
-  = case t of
-      Target_Interpreter_CoreCPS_LuaBC -> True
-      _ -> False
-{-# INLINE targetIsLuaBC #-}
-
+%%[(8 core) export(targetIsMSCIL)
 targetIsMSCIL :: Target -> Bool
 targetIsMSCIL t
   = case t of

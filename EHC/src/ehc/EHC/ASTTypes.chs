@@ -58,10 +58,6 @@
 %%[(8 core) import(qualified {%{EH}CoreCPS} as CoreCPS)
 %%]
 
--- LuaBC
-%%[(8 core) import(qualified {%{EH}LuaBC} as LuaBC)
-%%]
-
 -- MSCIL
 %%[(8 core) import(qualified {%{EH}MSCIL} as MSCIL)
 %%]
@@ -150,10 +146,6 @@ type AST_GrinBytecode		= Bytecode.Module
 
 %%[(8 core) export(AST_CoreCPS)
 type AST_CoreCPS = CoreCPS.CTm
-%%]
-
-%%[(8 core) export(AST_LuaBC)
-type AST_LuaBC = LuaBC.CChunk
 %%]
 
 %%[(8 core) export(AST_MSCIL)

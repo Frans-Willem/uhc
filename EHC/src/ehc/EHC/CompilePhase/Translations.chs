@@ -92,8 +92,6 @@ Translation to another AST
 %%]
 
 -- CoreCPS semantics
-%%[(8 core) import({%{EH}CoreCPS.ToLuaBC})
-%%]
 %%[(8 core) import({%{EH}CoreCPS.ToMSCIL})
 %%]
 
@@ -420,21 +418,6 @@ cpTranslateCore2CoreCPS modNm
              $ ecuStoreCoreCPS
              $ cmod2CoreCPSModule
              $ fromJust mbCore
-        }
-%%]
-
-%%[(8 core) export(cpTranslateCoreCPS2LuaBC)
-cpTranslateCoreCPS2LuaBC :: EHCCompileRunner m => HsName -> EHCompilePhaseT m ()
-cpTranslateCoreCPS2LuaBC modNm
-  = do  {  cr <- get
-        ;  let (ecu, crsu, opts, fp) = crBaseInfo modNm cr
-               mbCoreCPS = _ecuMbCoreCPS ecu
-        ;  cpMsg modNm VerboseALot $ "cpTranslateCoreCPS2LuaBC running"
-        ;  when (isJust mbCoreCPS)
-             $ cpUpdCU modNm
-             $ ecuStoreLuaBC
-             $ cps2luaChunk
-             $ fromJust mbCoreCPS
         }
 %%]
 

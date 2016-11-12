@@ -153,7 +153,6 @@ data EHCompileUnit
 %%]]
 %%[[(8 core)
       , _ecuMbCoreCPS        :: !(Maybe AST_CoreCPS)
-      , _ecuMbLuaBC          :: !(Maybe AST_LuaBC)
       , _ecuMbMSCIL          :: !(Maybe AST_MSCIL)
 %%]]
       , ecuState             :: !EHCompileUnitState
@@ -242,9 +241,6 @@ ecuHSSem = isoMb "ecuMbHSSem" ecuMbHSSem
 
 %%[(8 core) export(ecuMbCoreCPS, ecuCoreCPS)
 ecuCoreCPS = isoMb "ecuMbCoreCPS" ecuMbCoreCPS
-%%]
-%%[(8 core) export(ecuMbLuaBC, ecuLuaBC)
-ecuLuaBC = isoMb "ecuMbLuaBC" ecuMbLuaBC
 %%]
 %%[(8 core) export(ecuMbMSCIL, ecuMSCIL)
 ecuMSCIL = isoMb "ecuMbMSCIL" ecuMbMSCIL
@@ -367,7 +363,6 @@ emptyECU
 %%]]
 %%[[(8 core)
       , _ecuMbCoreCPS        = Nothing
-      , _ecuMbLuaBC          = Nothing
       , _ecuMbMSCIL          = Nothing
 %%]]
       , ecuState             = ECUS_Unknown
@@ -679,11 +674,6 @@ ecuStoreCmm x ecu = ecu { _ecuMbCmm = Just x }
 ecuStoreCoreCPS :: EcuUpdater AST_CoreCPS
 ecuStoreCoreCPS x ecu = ecu { _ecuMbCoreCPS = Just x }
 %%]]
-
-%%[(8 core) export(ecuStoreLuaBC)
-ecuStoreLuaBC :: EcuUpdater AST_LuaBC
-ecuStoreLuaBC x ecu = ecu { _ecuMbLuaBC = Just x }
-%%]
 
 %%[(8 core) export(ecuStoreMSCIL)
 ecuStoreMSCIL :: EcuUpdater AST_MSCIL

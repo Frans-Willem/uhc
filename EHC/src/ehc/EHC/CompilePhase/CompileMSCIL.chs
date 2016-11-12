@@ -16,8 +16,6 @@
 %%]
 %%[(8 core) import ({%{EH}CodeGen.Bits})
 %%]
-%%[(8 core) import ({%{EH}LuaBC.ToBinary})
-%%]
 %%[(8 core) import({%{EH}EHC.CompileUnit})
 %%]
 %%[(8 core) import({%{EH}EHC.CompilePhase.Output})
