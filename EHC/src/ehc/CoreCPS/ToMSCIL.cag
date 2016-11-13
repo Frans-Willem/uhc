@@ -234,14 +234,26 @@ createTagClass tag arguments =
     ( argfields
       ++
       [ MSCIL.ClassMember_Method
-          ( MSCIL.ctorHeader argparams )
+          ( MSCIL.ctorHeader [] )
           (
-            [ MSCIL.MethodBodyItem_MaxStack 2
-            ] ++
-            storeinstrs ++ 
-            [ MSCIL.instrRet
+            [ MSCIL.MethodBodyItem_MaxStack 0
+            , MSCIL.instrRet
             ]
           )
+      , MSCIL.ClassMember_Method
+          ( MSCIL.methodHeader
+            [MSCIL.MethAttr_Public]
+            (Just MSCIL.callConv_Instance)
+            MSCIL.Type_Void
+            (MSCIL.stringToMethodName "Fixup")
+            argparams
+          )
+          (
+            [ MSCIL.MethodBodyItem_MaxStack 2 ] ++
+            storeinstrs ++
+            [ MSCIL.instrRet ]
+          )
+            
       ]
     )
   where
@@ -383,6 +395,7 @@ SEM CTm
   | LetFFI loc.argkeys = map asKey @args
   | LetFFI (loc.ffiinstr, loc.ffimaxstack) = FFI.parseFFI @instr (map (readEnv @lhs.env) @loc.argkeys)
   | LetFFI loc.resultOffset = @lhs.localoffset
+  | LetFFI lhs.locals = (keyToLocal @loc.valuekey) : @body.locals
   | LetFFI body.localoffset = @lhs.localoffset + 1
   | LetFFI lhs.instr = @loc.ffiinstr ++ [ MSCIL.instrStLoc @loc.resultOffset ] ++ @body.instr
   | LetFFI lhs.maxstack = @loc.ffimaxstack `max` @body.maxstack
