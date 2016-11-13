@@ -85,25 +85,25 @@ SEM CTm
   | LetFFI lhs.cTrf = CTm_LetFFI @loc.trfValName @instr @loc.newArgs @ty @body.cTrf
 
 SEM CTm
-  | Let loc.newThunkMap = @binds.thunkMap `Map.union` @lhs.thunkMap
-  | Let loc.newValMap = @binds.valMap `Map.union` @lhs.valMap
+  | Let loc.newThunkMap = @binds.boundThunkMap `Map.union` @lhs.thunkMap
+  | Let loc.newValMap = @binds.boundValMap `Map.union` @lhs.valMap
   | Let binds.thunkMap = @loc.newThunkMap
   | Let body.thunkMap = @loc.newThunkMap
   | Let binds.valMap = @loc.newValMap
   | Let body.valMap = @loc.newValMap
 
-ATTR CBind CBindL [ | | thunkMap USE {Map.union} {Map.empty} : {Map.Map ThunkName ThunkName} ]
-ATTR CBind CBindL [ | | valMap USE {Map.union} {Map.empty} : {Map.Map ValueName ValueName} ]
+ATTR CBind CBindL [ | | boundThunkMap USE {Map.union} {Map.empty} : {Map.Map ThunkName ThunkName} ]
+ATTR CBind CBindL [ | | boundValMap USE {Map.union} {Map.empty} : {Map.Map ValueName ValueName} ]
 SEM CBind
   | ThunkBind (body.gUniq, loc.lUniq) = newUniq 2 @lhs.gUniq
   | ThunkBind loc.trfThunkname = trfThunkName @thunkname (@loc.lUniq !! 0)
   | ThunkBind loc.trfContname = trfContName @contname (@loc.lUniq !! 1)
-  | ThunkBind lhs.thunkMap = Map.singleton @thunkname @loc.trfThunkname
+  | ThunkBind lhs.boundThunkMap = Map.singleton @thunkname @loc.trfThunkname
   | ThunkBind body.contMap = Map.insert @contname @loc.trfContname @lhs.contMap
   | ThunkBind lhs.cTrf = CBind_ThunkBind @loc.trfThunkname @loc.trfContname @body.cTrf
   | ValBind (value.gUniq, loc.lUniq) = newUniq 1 @lhs.gUniq
   | ValBind loc.trfValName = trfValueName @valname (@loc.lUniq !! 0)
-  | ValBind lhs.valMap = Map.singleton @valname @loc.trfValName
+  | ValBind lhs.boundValMap = Map.singleton @valname @loc.trfValName
   | ValBind lhs.cTrf = CBind_ValBind @loc.trfValName @value.cTrf
 
 SEM CTm
