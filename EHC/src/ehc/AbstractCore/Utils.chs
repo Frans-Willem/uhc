@@ -440,7 +440,7 @@ rceMatchConMany env ((arg,ty):args) [RAlt_Alt (RPat_Con n _ t (RPatConBind_Many 
 
 rceMatchConst :: (Eq bcat, AbstractCore e b bound boundmeta bcat t p pr pf a, CSubstitutable e b ba t e) => RCEEnv' e b ba t -> [(HsName,t)] -> RCEAltL' e t b pr -> e
 rceMatchConst env ((arg,ty):args) alts
-  = acoreLet1StrictInTy arg' ty (acoreVar arg) (\n -> acoreLet cat (rceRebinds True (arg,ty) alts) (acoreCaseDflt n alts' Nothing {-(rceCaseCont env)-}))
+  = acoreLet1StrictInTy arg' ty (acoreVar arg) (\n -> acoreLet cat (rceRebinds True (arg,ty) alts) (acoreCaseDflt n alts' (Just $ rceCaseCont env)))
   where arg' = hsnUniqifyEval arg
         alts' = [ acoreAlt (acoreRPat2Pat p) (cSubstApp (rceCaseFailSubst env) e {- tcSubstCaseAltFail (rceEHCOpts env) (rceCaseFailSubst env) e -}) | (RAlt_Alt (p:_) e _) <- alts ]
         cat = acoreBindcategPlain
