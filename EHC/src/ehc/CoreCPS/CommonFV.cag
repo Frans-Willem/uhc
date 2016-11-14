@@ -1,0 +1,61 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%[(8 core)
+ATTR CVal CBind CBindL CCaseBranch CCaseBranchL CTm [ | | freeThunks USE {Set.union} {Set.empty} : {Set.Set ThunkName} ]
+ATTR CVal CBind CBindL CCaseBranch CCaseBranchL CTm [ | | freeValues USE {Set.union} {Set.empty} : {Set.Set ValueName} ]
+ATTR CVal CBind CBindL CCaseBranch CCaseBranchL CTm [ | | freeConts USE {Set.union} {Set.empty} : {Set.Set ContName} ]
+
+SEM CVal
+  | LamVal lhs.freeConts = Set.delete @bindcont @body.freeConts
+  | LamVal lhs.freeThunks = @body.freeThunks `Set.difference` (Set.fromList @bindargs)
+
+SEM CVal
+  | TagVal lhs.freeThunks = Set.fromList @args
+
+SEM CBind
+  | ThunkBind lhs.freeConts = Set.delete @contname @body.freeConts
+
+SEM CCaseBranch
+  | CaseBranch lhs.freeThunks = @body.freeThunks `Set.difference` @pat.boundThunks
+
+SEM CTm
+  | LetCont lhs.freeConts = @bindbody.freeConts `Set.union` (Set.delete @contname @body.freeConts)
+  | LetCont lhs.freeValues = (Set.delete @valname @bindbody.freeValues) `Set.union` @body.freeValues
+
+SEM CTm
+  | LetFFI lhs.freeValues = (Set.fromList @args) `Set.union` (Set.delete @valname @body.freeValues)
+
+SEM CTm
+  | Let lhs.freeValues = (@binds.freeValues `Set.union` @body.freeValues) `Set.difference` @binds.boundValues
+  | Let lhs.freeThunks = (@binds.freeThunks `Set.union` @body.freeThunks) `Set.difference` @binds.boundThunks
+
+SEM CTm
+  | ContAppl lhs.freeConts = Set.singleton @cont
+  | ContAppl lhs.freeValues = Set.singleton @val
+
+SEM CTm
+  | ThunkEval lhs.freeThunks = Set.singleton @thunk
+  | ThunkEval lhs.freeConts = Set.singleton @cont
+
+SEM CTm
+  | FuncAppl lhs.freeValues = Set.singleton @func
+  | FuncAppl lhs.freeConts = Set.singleton @cont
+  | FuncAppl lhs.freeThunks = Set.fromList @args
+
+SEM CTm
+  | Exit lhs.freeValues = Set.singleton @val
+
+SEM CTm
+  | Case lhs.freeValues = (Set.singleton @val) `Set.union` @branches.freeValues
+
+ATTR CBind CBindL CCasePattern [ | | boundThunks USE {Set.union} {Set.empty} : {Set.Set ThunkName} ]
+ATTR CBind CBindL [ | | boundValues USE {Set.union} {Set.empty} : {Set.Set ValueName} ]
+
+SEM CBind
+  | ThunkBind lhs.boundThunks = Set.singleton @thunkname
+SEM CBind
+  | ValBind lhs.boundValues = Set.singleton @valname
+%%]
