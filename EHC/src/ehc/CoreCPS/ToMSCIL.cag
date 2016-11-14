@@ -19,7 +19,7 @@
 %%[(8 core) hs import(qualified {%{EH}MSCIL.FFI} as FFI)
 %%]
 
-%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn})
+%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn},{CoreCPS/CommonFV})
 WRAPPER CTm
 %%]
 
@@ -302,6 +302,10 @@ unboxInstr ty =
   if (appMbCon ty == Just hsnInt)
     then [MSCIL.instrUnboxAny (MSCIL.typeToTypeSpec MSCIL.Type_NativeInt)]
     else []
+
+envSet :: VarSet -> Set.Set EnvironmentKey
+envSet (VarSet vs ts cs) = (Set.map asKey vs) `Set.union` (Set.map asKey ts) `Set.union` (Set.map asKey cs)
+
 %%]
 
 %%[(8 core) ag
@@ -329,7 +333,7 @@ SEM CTm
   | LetCont loc.target = @lhs.localoffset
   | LetCont body.localoffset = @lhs.localoffset + 1
   | LetCont loc.classname = continuationClassName @contname
-  | LetCont loc.upvalues = Set.toList $ Set.delete @loc.valuekey @bindbody.freevars
+  | LetCont loc.upvalues = Set.toList $ Set.delete @loc.valuekey (envSet @bindbody.freeVars)
   | LetCont loc.class =
       MSCIL.Decl_Class
         ( MSCIL.classHeader
@@ -434,7 +438,7 @@ ATTR CBind CBindL [ recenv : {Environment} | | ]
 ATTR CBind CBindL [ | | allocinstr USE {++} {[]} : {MSCIL.MethodBodyItemL} allocmaxstack USE {max} {0} : {Int} ]
 ATTR CBind CBindL [ | | classes USE {++} {[]} : {MSCIL.DeclL} ]
 SEM CBind
-  | ThunkBind loc.upvalues = @body.freevars `Set.difference` (Set.fromList [@loc.thunkkey, @loc.contkey])
+  | ThunkBind loc.upvalues = (envSet @body.freeVars) `Set.difference` (Set.fromList [@loc.thunkkey, @loc.contkey])
   | ThunkBind loc.nonrecupvalues = Set.toList $ @loc.upvalues `Set.difference` (Map.keysSet @lhs.recenv)
   | ThunkBind loc.recupvalues = Set.toList $ @loc.upvalues `Set.intersection` (Map.keysSet @lhs.recenv)
   | ThunkBind loc.allupvalues = @loc.recupvalues ++ @loc.nonrecupvalues
@@ -567,7 +571,7 @@ SEM CVal
   | LamVal loc.classname = functionClassName @lhs.name
   | LamVal loc.contkey = asKey @bindcont
   | LamVal loc.thunkkeys = map asKey @bindargs
-  | LamVal loc.upvalues = (@body.freevars `Set.difference` (Set.fromList (@loc.contkey : @loc.thunkkeys)))
+  | LamVal loc.upvalues = ((envSet @body.freeVars) `Set.difference` (Set.fromList (@loc.contkey : @loc.thunkkeys)))
   | LamVal loc.allupvalues = Set.toList @loc.upvalues
   | LamVal loc.recupvalues = Set.toList (@loc.upvalues `Set.intersection` (Map.keysSet @lhs.recenv))
   | LamVal loc.nonrecupvalues = Set.toList (@loc.upvalues `Set.difference` (Map.keysSet @lhs.recenv))
@@ -808,7 +812,7 @@ SEM CCaseBranchL
   | Cons tl.index = @lhs.index + 1
 SEM CCaseBranch
   | CaseBranch loc.branchmethod = MSCIL.stringToMethodName $ "branch" ++ (show @lhs.index)
-  | CaseBranch loc.upvalues = Set.toList @body.freevars
+  | CaseBranch loc.upvalues = Set.toList (envSet @body.freeVars)
   | CaseBranch pat.bodyupvalues = @loc.upvalues
   | CaseBranch body.localoffset = 0
   | CaseBranch body.env = Map.fromList $ zip @loc.upvalues (map Argument [0..])
@@ -906,49 +910,4 @@ SEM CCasePattern
       , MSCIL.instrRet
       ]
   | Int lhs.maxstack = foldl max (2 `max` length @lhs.bodyupvalues) $ @loc.valmaxstack : (zipWith (+) @loc.upvaluemaxstack [0..])
-----
--- Free and bound variables
-----
--- Should go in a shared AG file.
-ATTR CTm CVal [ | | freevars : {Set.Set EnvironmentKey} ]
-ATTR CBind CBindL [ | | freevars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} boundvars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} ]
-SEM CTm
-  | LetCont lhs.freevars = (Set.delete @loc.valuekey @bindbody.freevars) `Set.union` (Set.delete @loc.contkey @body.freevars)
-  | LetFFI lhs.freevars = (Set.delete @loc.valuekey @body.freevars) `Set.union` (Set.fromList $ map asKey @args)
-  -- Let op, alleen let thunk kan recursief zijn eigen binds zien.
-  | Let lhs.freevars = (@binds.freevars `Set.union` @body.freevars) `Set.difference` @binds.boundvars
-  | ContAppl lhs.freevars = Set.fromList [asKey @cont, asKey @val]
-  | ThunkEval lhs.freevars = Set.fromList [asKey @thunk, asKey @cont]
-  | FuncAppl lhs.freevars = Set.fromList ([asKey @func, asKey @cont] ++ (map asKey @args))
-  | Exit lhs.freevars = Set.fromList [asKey @val]
-  | Case lhs.freevars = @branches.freevars
-
-SEM CVal
-  | IntVal StringVal lhs.freevars = Set.empty
-  | LamVal lhs.freevars = @body.freevars `Set.difference` (Set.fromList (asKey @bindcont:map asKey @bindargs))
-  | TagVal lhs.freevars = Set.fromList $ map asKey @args
-
-SEM CBind
-  | ThunkBind lhs.boundvars = Set.fromList [asKey @thunkname]
-  | ThunkBind lhs.freevars = Set.delete (asKey @contname) @body.freevars
-  | ValBind lhs.boundvars = Set.singleton (asKey @valname)
-  | ValBind lhs.freevars = @value.freevars
-
-ATTR CCasePattern [ | | boundvars : {Set.Set EnvironmentKey} ]
-SEM CCasePattern
-  | Default lhs.boundvars = Set.empty
-  | Tag loc.restboundvars =
-      case @rest of
-        Nothing -> Set.empty
-        Just x -> Set.singleton $ asKey x
-  | Tag lhs.boundvars = @loc.restboundvars `Set.union` (Set.fromList $ map asKey @args)
-  | Int lhs.boundvars = Set.empty
-
-ATTR CCaseBranch [ | | boundvars : {Set.Set EnvironmentKey} ]
-ATTR CCaseBranch [ | | freevars : {Set.Set EnvironmentKey} ]
-ATTR CCaseBranchL [ | | boundvars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} ]
-ATTR CCaseBranchL [ | | freevars USE {Set.union} {Set.empty} : {Set.Set EnvironmentKey} ]
-SEM CCaseBranch
-  | CaseBranch loc.boundvars = @pat.boundvars
-  | CaseBranch lhs.freevars = @body.freevars `Set.difference` @pat.boundvars
 %%]

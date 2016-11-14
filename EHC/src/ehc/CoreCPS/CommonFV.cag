@@ -3,59 +3,90 @@
 %include afp.fmt
 %%]
 
+%%[(8 core) hs
+data VarSet
+  = VarSet
+      { thunkSet :: Set.Set ThunkName
+      , valueSet :: Set.Set ValueName
+      , contSet :: Set.Set ContName
+      }
+
+varSetEmpty :: VarSet
+varSetEmpty = VarSet Set.empty Set.empty Set.empty
+
+varSetSingleThunk :: ThunkName -> VarSet
+varSetSingleThunk t = VarSet (Set.singleton t) Set.empty Set.empty
+
+varSetSingleValue :: ValueName -> VarSet
+varSetSingleValue v = VarSet Set.empty (Set.singleton v) Set.empty
+
+varSetSingleCont :: ContName -> VarSet
+varSetSingleCont c = VarSet Set.empty Set.empty (Set.singleton c)
+
+varSetFromThunkList :: [ThunkName] -> VarSet
+varSetFromThunkList tl = VarSet (Set.fromList tl) Set.empty Set.empty
+
+varSetFromValueList :: [ValueName] -> VarSet
+varSetFromValueList vl = VarSet Set.empty (Set.fromList vl) Set.empty
+
+varSetDeleteThunk :: ThunkName -> VarSet -> VarSet
+varSetDeleteThunk t (VarSet ts vs cs) = VarSet (Set.delete t ts) vs cs
+
+varSetDeleteValue :: ValueName -> VarSet -> VarSet
+varSetDeleteValue v (VarSet ts vs cs) = VarSet ts (Set.delete v vs) cs
+
+varSetDeleteCont :: ContName -> VarSet -> VarSet
+varSetDeleteCont c (VarSet ts vs cs) = VarSet ts vs (Set.delete c cs)
+
+varSetUnion :: VarSet -> VarSet -> VarSet
+varSetUnion (VarSet a1 a2 a3) (VarSet b1 b2 b3) = VarSet (a1 `Set.union` b1) (a2 `Set.union` b2) (a3 `Set.union` b3)
+
+varSetDifference :: VarSet -> VarSet -> VarSet
+varSetDifference (VarSet a1 a2 a3) (VarSet b1 b2 b3) = VarSet (a1 `Set.difference` b1) (a2 `Set.difference` b2) (a3 `Set.difference` b3)
+
+varSetIntersection :: VarSet -> VarSet -> VarSet
+varSetIntersection (VarSet a1 a2 a3) (VarSet b1 b2 b3) = VarSet (a1 `Set.intersection` b1) (a2 `Set.intersection` b2) (a3 `Set.intersection` b3)
+
+varSetNull :: VarSet -> Bool
+varSetNull (VarSet ts vs cs) = (Set.null ts) && (Set.null vs) && (Set.null cs)
+
+varSetThunkMember :: ThunkName -> VarSet -> Bool
+varSetThunkMember t (VarSet ts _ _) = Set.member t ts
+varSetValueMember :: ValueName -> VarSet -> Bool
+varSetValueMember v (VarSet _ vs _) = Set.member v vs
+varSetContMember :: ContName -> VarSet -> Bool
+varSetContMember c (VarSet _ _ cs) = Set.member c cs
+%%]
+
 %%[(8 core)
-ATTR CVal CBind CBindL CCaseBranch CCaseBranchL CTm [ | | freeThunks USE {Set.union} {Set.empty} : {Set.Set ThunkName} ]
-ATTR CVal CBind CBindL CCaseBranch CCaseBranchL CTm [ | | freeValues USE {Set.union} {Set.empty} : {Set.Set ValueName} ]
-ATTR CVal CBind CBindL CCaseBranch CCaseBranchL CTm [ | | freeConts USE {Set.union} {Set.empty} : {Set.Set ContName} ]
+ATTR CVal CBind CBindL CCaseBranch CCaseBranchL CTm [ | | freeVars USE {varSetUnion} {varSetEmpty} : {VarSet} ]
 
 SEM CVal
-  | LamVal lhs.freeConts = Set.delete @bindcont @body.freeConts
-  | LamVal lhs.freeThunks = @body.freeThunks `Set.difference` (Set.fromList @bindargs)
-
-SEM CVal
-  | TagVal lhs.freeThunks = Set.fromList @args
+  | LamVal loc.freeVars = (varSetDeleteCont @bindcont @body.freeVars) `varSetDifference` (varSetFromThunkList @bindargs)
+  | TagVal loc.freeVars = varSetFromThunkList @args
 
 SEM CBind
-  | ThunkBind lhs.freeConts = Set.delete @contname @body.freeConts
+  | ThunkBind loc.freeVars = varSetDeleteCont @contname @body.freeVars
 
 SEM CCaseBranch
-  | CaseBranch lhs.freeThunks = @body.freeThunks `Set.difference` @pat.boundThunks
+  | CaseBranch loc.freeVars = @body.freeVars `varSetDifference` @pat.boundVars
 
 SEM CTm
-  | LetCont lhs.freeConts = @bindbody.freeConts `Set.union` (Set.delete @contname @body.freeConts)
-  | LetCont lhs.freeValues = (Set.delete @valname @bindbody.freeValues) `Set.union` @body.freeValues
+  | LetCont loc.freeVars = (varSetDeleteValue @valname @bindbody.freeVars) `varSetUnion` (varSetDeleteCont @contname @body.freeVars)
+  | LetFFI loc.freeVars = (varSetFromValueList @args) `varSetUnion` (varSetDeleteValue @valname @body.freeVars)
+  | Let loc.freeVars = (@binds.freeVars `varSetUnion` @body.freeVars) `varSetDifference` @binds.boundVars
+  | ContAppl loc.freeVars = (varSetSingleCont @cont) `varSetUnion` (varSetSingleValue @val)
+  | ThunkEval loc.freeVars = (varSetSingleThunk @thunk) `varSetUnion` (varSetSingleCont @cont)
+  | FuncAppl loc.freeVars = (varSetSingleValue @func) `varSetUnion` (varSetSingleCont @cont) `varSetUnion` (varSetFromThunkList @args)
+  | Exit loc.freeVars = varSetSingleValue @val
+  | Case loc.freeVars = (varSetSingleValue @val) `varSetUnion` @branches.freeVars
 
-SEM CTm
-  | LetFFI lhs.freeValues = (Set.fromList @args) `Set.union` (Set.delete @valname @body.freeValues)
-
-SEM CTm
-  | Let lhs.freeValues = (@binds.freeValues `Set.union` @body.freeValues) `Set.difference` @binds.boundValues
-  | Let lhs.freeThunks = (@binds.freeThunks `Set.union` @body.freeThunks) `Set.difference` @binds.boundThunks
-
-SEM CTm
-  | ContAppl lhs.freeConts = Set.singleton @cont
-  | ContAppl lhs.freeValues = Set.singleton @val
-
-SEM CTm
-  | ThunkEval lhs.freeThunks = Set.singleton @thunk
-  | ThunkEval lhs.freeConts = Set.singleton @cont
-
-SEM CTm
-  | FuncAppl lhs.freeValues = Set.singleton @func
-  | FuncAppl lhs.freeConts = Set.singleton @cont
-  | FuncAppl lhs.freeThunks = Set.fromList @args
-
-SEM CTm
-  | Exit lhs.freeValues = Set.singleton @val
-
-SEM CTm
-  | Case lhs.freeValues = (Set.singleton @val) `Set.union` @branches.freeValues
-
-ATTR CBind CBindL CCasePattern [ | | boundThunks USE {Set.union} {Set.empty} : {Set.Set ThunkName} ]
-ATTR CBind CBindL [ | | boundValues USE {Set.union} {Set.empty} : {Set.Set ValueName} ]
+ATTR CBind CBindL CCasePattern [ | | boundVars USE {varSetUnion} {varSetEmpty} : {VarSet} ]
 
 SEM CBind
-  | ThunkBind lhs.boundThunks = Set.singleton @thunkname
-SEM CBind
-  | ValBind lhs.boundValues = Set.singleton @valname
+  | ThunkBind loc.boundVars = varSetSingleThunk @thunkname
+  | ValBind loc.boundVars = varSetSingleValue @valname
+
+SEM CCasePattern
+  | Tag loc.boundVars = varSetFromThunkList ((maybeToList @rest) ++ @args)
 %%]
