@@ -89,4 +89,5 @@ CoreCPS/Trf/Unrec.cag
 CoreCPS/Trf/GlobUniq.cag
 CoreCPS/Trf/DropUnused.cag
 CoreCPS/Trf/CleanIds.cag
+CoreCPS/Trf/LiftLet.cag
 MSCIL/Pretty.cag

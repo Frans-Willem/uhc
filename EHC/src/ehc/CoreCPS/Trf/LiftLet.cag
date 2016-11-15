@@ -1,0 +1,70 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%[(8 core) hs module {%{EH}CoreCPS.Trf.LiftLet} import({%{EH}CoreCPS}, {%{EH}Ty})
+%%]
+
+%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn})
+WRAPPER CTmRoot
+%%]
+
+%%[(8 core) hs export(ctmTrfLiftLet)
+ctmTrfLiftLet :: CTm -> CTm
+ctmTrfLiftLet ctm
+  = let t = wrap_CTmRoot (sem_CTmRoot (CTmRoot_Root ctm))
+            (Inh_CTmRoot {})
+    in cTrf_Syn_CTmRoot t
+%%]
+
+%%[(8 core) hs
+applyLet :: (CBindL, CTm) -> CTm
+applyLet ([], t) = t
+applyLet (binds, t) = CTm_Let binds t
+%%]
+
+%%[(8 core)
+ATTR CBind CBindL [ | | cTrf : CBindL ]
+ATTR CTm [ | | cTrf : {(CBindL, CTm)} ]
+ATTR CVal CCasePattern CCaseBranch CCaseBranchL [ | | cTrf : SELF ]
+ATTR CTmRoot [ | | cTrf : CTm ]
+
+SEM CVal
+  | LamVal loc.cTrf = CVal_LamVal @bindcont @bindargs (applyLet @body.cTrf)
+
+SEM CBind
+  | ThunkBind (loc.bodyLifted, loc.bodyTrf) = @body.cTrf
+  | ThunkBind loc.cTrf = (CBind_ThunkBind @thunkname @contname @loc.bodyTrf) : @loc.bodyLifted
+  | ValBind loc.cTrf = [CBind_ValBind @valname @value.cTrf]
+
+SEM CBindL
+  | Nil loc.cTrf = []
+  | Cons loc.cTrf = @hd.cTrf ++ @tl.cTrf
+
+SEM CCaseBranch
+  | CaseBranch loc.cTrf = CCaseBranch_CaseBranch @pat.cTrf (applyLet @body.cTrf)
+
+SEM CTm
+  | LetCont loc.cTrf = ([], CTm_LetCont @contname @valname (applyLet @bindbody.cTrf) (applyLet @body.cTrf))
+
+SEM CTm
+  | LetFFI loc.cTrf =
+      ([], CTm_LetFFI @valname @instr @args @ty (applyLet @body.cTrf))
+
+
+SEM CTm
+  | Let (loc.bodyLifted, loc.bodyTrf) = @body.cTrf
+  | Let loc.cTrf = (@binds.cTrf ++ @loc.bodyLifted, @loc.bodyTrf)
+
+SEM CTm
+  | ContAppl lhs.cTrf = ([], CTm_ContAppl @cont @val)
+  | ThunkEval lhs.cTrf = ([], CTm_ThunkEval @thunk @cont)
+  | FuncAppl lhs.cTrf = ([], CTm_FuncAppl @func @cont @args)
+  | Exit lhs.cTrf = ([], CTm_Exit @val)
+  | Case lhs.cTrf = ([], CTm_Case @val @branches.cTrf)
+
+SEM CTmRoot
+  | Root loc.cTrf = applyLet @root.cTrf
+
+%%]
