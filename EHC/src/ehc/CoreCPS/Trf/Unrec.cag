@@ -6,7 +6,7 @@
 %%[(8 core) hs module {%{EH}CoreCPS.Trf.Unrec} import({%{EH}CoreCPS}, {%{EH}Ty}, UHC.Util.Utils(scc), qualified Data.Set as Set, qualified Data.Map as Map, Data.Maybe)
 %%]
 
-%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn})
+%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn},{CoreCPS/CommonFV})
 WRAPPER CTm
 %%]
 
@@ -22,49 +22,15 @@ ctmTrfUnrec ctm
 %%]
 
 %%[(8 core)
-ATTR CTm CVal CBind CBindL CCaseBranch CCaseBranchL CCasePattern [ | | freeThunks USE {Set.union} {Set.empty}: {Set.Set ThunkName} ]
-ATTR CTm CVal CBind CBindL CCaseBranch CCaseBranchL CCasePattern [ | | freeVals USE {Set.union} {Set.empty} : {Set.Set ValueName} ]
-ATTR CBind CBindL CCasePattern [ | | boundThunks USE {Set.union} {Set.empty} : {Set.Set ThunkName} ]
-ATTR CBind CBindL CCasePattern [ | | boundVals USE {Set.union} {Set.empty} : {Set.Set ValueName} ]
-
-SEM CVal
-  | LamVal lhs.freeThunks = @body.freeThunks `Set.difference` (Set.fromList @bindargs)
-  | TagVal lhs.freeThunks = Set.fromList @args
-
+ATTR CBind CBindL [ | | refMap USE {Map.unionWith Set.union} {Map.empty} : {Map.Map CPSVar VarSet} ]
 SEM CBind
-  | ThunkBind lhs.boundThunks = Set.singleton @thunkname
-  | ValBind lhs.boundVals = Set.singleton @valname
+  | ThunkBind lhs.refMap = Map.singleton (CPSThunk @thunkname) @loc.freeVars
+  | ValBind lhs.refMap = Map.singleton (CPSValue @valname) @value.freeVars
 
-SEM CCasePattern
-  | Tag lhs.boundThunks = Set.fromList (@args ++ (maybeToList @rest))
-
-SEM CCaseBranch
-  | CaseBranch lhs.freeThunks = @body.freeThunks `Set.difference` @pat.boundThunks
-
-SEM CTm
-  | Let lhs.freeThunks = (@body.freeThunks `Set.union` @binds.freeThunks) `Set.difference` @binds.boundThunks
-  | Let lhs.freeVals = (@body.freeVals `Set.union` @binds.freeVals) `Set.difference` @binds.boundVals
-  | LetFFI lhs.freeVals = Set.fromList @args `Set.union` (Set.delete @valname @body.freeVals)
-  | ContAppl lhs.freeVals = Set.singleton @val
-  | ThunkEval lhs.freeThunks = Set.singleton @thunk
-  | FuncAppl lhs.freeThunks = Set.fromList @args
-  | FuncAppl lhs.freeVals = Set.singleton @func
-  | Exit lhs.freeVals = Set.singleton @val
-  | Case lhs.freeVals = (Set.singleton @val) `Set.union` @branches.freeVals
-%%]
-
-%%[(8 core)
-ATTR CBind CBindL [ | | refMap USE {Map.unionWith Set.union} {Map.empty} : {Map.Map (Either ThunkName ValueName) (Set.Set (Either ThunkName ValueName))} ]
+ATTR CBind CBindL [ | | bindMap USE {Map.union} {Map.empty} : {Map.Map CPSVar CBind} ]
 SEM CBind
-  | ThunkBind loc.freeBoth = (Set.map Left @body.freeThunks) `Set.union` (Set.map Right @body.freeVals)
-  | ThunkBind lhs.refMap = Map.singleton (Left @thunkname) @loc.freeBoth
-  | ValBind loc.freeBoth = (Set.map Left @value.freeThunks) `Set.union` (Set.map Right @value.freeVals)
-  | ValBind lhs.refMap = Map.singleton (Right @valname) @loc.freeBoth
-
-ATTR CBind CBindL [ | | bindMap USE {Map.union} {Map.empty} : {Map.Map (Either ThunkName ValueName) CBind} ]
-SEM CBind
-  | ThunkBind lhs.bindMap = Map.singleton (Left @thunkname) (CBind_ThunkBind @thunkname @contname @body.cTrf)
-  | ValBind lhs.bindMap = Map.singleton (Right @valname) (CBind_ValBind @valname @value.cTrf)
+  | ThunkBind lhs.bindMap = Map.singleton (CPSThunk @thunkname) (CBind_ThunkBind @thunkname @contname @body.cTrf)
+  | ValBind lhs.bindMap = Map.singleton (CPSValue @valname) (CBind_ValBind @valname @value.cTrf)
 %%]
 
 
@@ -72,8 +38,7 @@ SEM CBind
 ATTR CTm CVal CBind CBindL CCaseBranch CCaseBranchL CCasePattern [ | | cTrf : SELF ]
 
 SEM CTm
-  | Let loc.boundBoth = (Set.map Left @binds.boundThunks) `Set.union` (Set.map Right @binds.boundVals)
-  | Let loc.truncatedRefMap = Map.map (Set.intersection @loc.boundBoth) @binds.refMap
+  | Let loc.truncatedRefMap = Map.map (Set.intersection @binds.boundVars) @binds.refMap
   | Let loc.flattenedRefMap = Map.toList (Map.map Set.toList @loc.truncatedRefMap)
   | Let loc.scc = scc @loc.flattenedRefMap
   | Let lhs.cTrf = foldr (\binds -> CTm_Let (catMaybes $ map (\bind -> Map.lookup bind @binds.bindMap) binds)) @body.cTrf @loc.scc

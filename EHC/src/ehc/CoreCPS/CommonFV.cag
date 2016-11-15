@@ -4,58 +4,59 @@
 %%]
 
 %%[(8 core) hs
-data VarSet
-  = VarSet
-      { thunkSet :: Set.Set ThunkName
-      , valueSet :: Set.Set ValueName
-      , contSet :: Set.Set ContName
-      }
+data CPSVar
+  = CPSValue ValueName
+  | CPSThunk ThunkName
+  | CPSCont ContName
+  deriving (Eq, Ord)
+
+type VarSet = Set.Set CPSVar
 
 varSetEmpty :: VarSet
-varSetEmpty = VarSet Set.empty Set.empty Set.empty
+varSetEmpty = Set.empty
 
 varSetSingleThunk :: ThunkName -> VarSet
-varSetSingleThunk t = VarSet (Set.singleton t) Set.empty Set.empty
+varSetSingleThunk = Set.singleton . CPSThunk
 
 varSetSingleValue :: ValueName -> VarSet
-varSetSingleValue v = VarSet Set.empty (Set.singleton v) Set.empty
+varSetSingleValue = Set.singleton . CPSValue
 
 varSetSingleCont :: ContName -> VarSet
-varSetSingleCont c = VarSet Set.empty Set.empty (Set.singleton c)
+varSetSingleCont = Set.singleton . CPSCont
 
 varSetFromThunkList :: [ThunkName] -> VarSet
-varSetFromThunkList tl = VarSet (Set.fromList tl) Set.empty Set.empty
+varSetFromThunkList = Set.fromList . (map CPSThunk)
 
 varSetFromValueList :: [ValueName] -> VarSet
-varSetFromValueList vl = VarSet Set.empty (Set.fromList vl) Set.empty
+varSetFromValueList = Set.fromList . (map CPSValue)
 
 varSetDeleteThunk :: ThunkName -> VarSet -> VarSet
-varSetDeleteThunk t (VarSet ts vs cs) = VarSet (Set.delete t ts) vs cs
+varSetDeleteThunk = Set.delete . CPSThunk
 
 varSetDeleteValue :: ValueName -> VarSet -> VarSet
-varSetDeleteValue v (VarSet ts vs cs) = VarSet ts (Set.delete v vs) cs
+varSetDeleteValue = Set.delete . CPSValue
 
 varSetDeleteCont :: ContName -> VarSet -> VarSet
-varSetDeleteCont c (VarSet ts vs cs) = VarSet ts vs (Set.delete c cs)
+varSetDeleteCont = Set.delete . CPSCont
 
 varSetUnion :: VarSet -> VarSet -> VarSet
-varSetUnion (VarSet a1 a2 a3) (VarSet b1 b2 b3) = VarSet (a1 `Set.union` b1) (a2 `Set.union` b2) (a3 `Set.union` b3)
+varSetUnion = Set.union
 
 varSetDifference :: VarSet -> VarSet -> VarSet
-varSetDifference (VarSet a1 a2 a3) (VarSet b1 b2 b3) = VarSet (a1 `Set.difference` b1) (a2 `Set.difference` b2) (a3 `Set.difference` b3)
+varSetDifference = Set.difference
 
 varSetIntersection :: VarSet -> VarSet -> VarSet
-varSetIntersection (VarSet a1 a2 a3) (VarSet b1 b2 b3) = VarSet (a1 `Set.intersection` b1) (a2 `Set.intersection` b2) (a3 `Set.intersection` b3)
+varSetIntersection = Set.intersection
 
 varSetNull :: VarSet -> Bool
-varSetNull (VarSet ts vs cs) = (Set.null ts) && (Set.null vs) && (Set.null cs)
+varSetNull = Set.null
 
 varSetThunkMember :: ThunkName -> VarSet -> Bool
-varSetThunkMember t (VarSet ts _ _) = Set.member t ts
+varSetThunkMember = Set.member . CPSThunk
 varSetValueMember :: ValueName -> VarSet -> Bool
-varSetValueMember v (VarSet _ vs _) = Set.member v vs
+varSetValueMember = Set.member . CPSValue
 varSetContMember :: ContName -> VarSet -> Bool
-varSetContMember c (VarSet _ _ cs) = Set.member c cs
+varSetContMember = Set.member . CPSCont
 %%]
 
 %%[(8 core)

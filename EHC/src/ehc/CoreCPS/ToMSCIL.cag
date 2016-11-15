@@ -154,6 +154,10 @@ instance ToEnvKey ThunkName where
   asKey = ThunkKey
 instance ToEnvKey ContName where
   asKey = ContinuationKey
+instance ToEnvKey CPSVar where
+  asKey (CPSValue v) = asKey v
+  asKey (CPSThunk t) = asKey t
+  asKey (CPSCont c) = asKey c
 
 instance Show EnvironmentKey where
   show (ValueKey (ValueName nm)) = "value " ++ show nm
@@ -304,7 +308,7 @@ unboxInstr ty =
     else []
 
 envSet :: VarSet -> Set.Set EnvironmentKey
-envSet (VarSet vs ts cs) = (Set.map asKey vs) `Set.union` (Set.map asKey ts) `Set.union` (Set.map asKey cs)
+envSet = Set.map asKey
 
 %%]
 
