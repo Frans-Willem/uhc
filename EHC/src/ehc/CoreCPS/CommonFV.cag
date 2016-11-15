@@ -89,5 +89,5 @@ SEM CBind
   | ValBind loc.boundVars = varSetSingleValue @valname
 
 SEM CCasePattern
-  | Tag loc.boundVars = varSetFromThunkList ((maybeToList @rest) ++ @args)
+  | Tag loc.boundVars = varSetFromThunkList @args
 %%]

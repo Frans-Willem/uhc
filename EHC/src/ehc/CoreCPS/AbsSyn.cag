@@ -29,7 +29,6 @@ DATA CCasePattern
   | Default
   | Tag
       tag : {CTag}
-      rest : {Maybe ThunkName}
       args : {[ThunkName]}
   | Int value : {Int}
 

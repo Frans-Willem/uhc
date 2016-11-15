@@ -403,11 +403,22 @@ ATTR CPat [ cpsContent : {CPS.CTm} | | cpsTrans : {CPS.CTm} ]
 ATTR CPat [ cpsValueName : {CPS.ValueName} | | ]
 SEM CPat
   | Var lhs.cpsPattern = CPS.CCasePattern_Default
-  | Con lhs.cpsPattern = CPS.CCasePattern_Tag @tag @rest.cpsTrans @binds.cpsTrans
+  | Con lhs.cpsPattern = CPS.CCasePattern_Tag @tag @binds.cpsTrans
   | Int lhs.cpsPattern = CPS.CCasePattern_Int @int
-  | Var loc.cpsFreshContNumber : UNIQUEREF cpsFreshContCounter
-  | Var loc.cpsFreshContName = createFreshContName @loc.cpsFreshContNumber
+  | Con Var loc.cpsFreshContNumber : UNIQUEREF cpsFreshContCounter
+  | Con Var loc.cpsFreshContName = createFreshContName @loc.cpsFreshContNumber
 
+  | Con lhs.cpsTrans =
+      case @rest.cpsTrans of
+        Nothing -> @lhs.cpsContent
+        Just restname ->
+          CPS.CTm_Let
+            [ CPS.CBind_ThunkBind
+                restname
+                @loc.cpsFreshContName
+                (CPS.CTm_ContAppl @loc.cpsFreshContName @lhs.cpsValueName)
+            ]
+            @lhs.cpsContent
   | Var lhs.cpsTrans =
       CPS.CTm_Let
         [
@@ -417,7 +428,7 @@ SEM CPat
           (CPS.CTm_ContAppl @loc.cpsFreshContName @lhs.cpsValueName)
         ]
         @lhs.cpsContent
-  | * - Var lhs.cpsTrans = @lhs.cpsContent
+  | * - Con Var lhs.cpsTrans = @lhs.cpsContent
 
 ATTR CPatRest [ | | cpsTrans : {Maybe CPS.ThunkName} ]
 SEM CPatRest

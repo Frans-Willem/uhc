@@ -133,13 +133,10 @@ SEM CTm
 ATTR CCasePattern [ | | bindMap : {Map.Map ThunkName ThunkName} ]
 SEM CCasePattern
   | Default Int lhs.bindMap = Map.empty
-  | Tag loc.input = (maybeToList @rest) ++ @args
-  | Tag (lhs.gUniq, loc.lUniq) = newUniq (length @loc.input) @lhs.gUniq
-  | Tag loc.output = zipWith trfThunkName @loc.input @loc.lUniq
-  | Tag loc.bindMap = Map.fromList (zip @loc.input @loc.output)
-  | Tag loc.trfArgs = map (lookupThunkName @loc.bindMap) @args
-  | Tag loc.trfRest = fmap (lookupThunkName @loc.bindMap) @rest
-  | Tag lhs.cTrf = CCasePattern_Tag @tag @loc.trfRest @loc.trfArgs
+  | Tag (lhs.gUniq, loc.lUniq) = newUniq (length @args) @lhs.gUniq
+  | Tag loc.trfArgs = zipWith trfThunkName @args @loc.lUniq
+  | Tag loc.bindMap = Map.fromList (zip @args @loc.trfArgs)
+  | Tag lhs.cTrf = CCasePattern_Tag @tag @loc.trfArgs
 
 SEM CCaseBranch
   | CaseBranch body.thunkMap = @pat.bindMap `Map.union` @lhs.thunkMap

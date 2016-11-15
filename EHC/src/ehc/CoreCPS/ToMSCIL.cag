@@ -875,11 +875,7 @@ SEM CCasePattern
         )
         [1..]
   | Tag loc.fieldenv = Map.fromList $ zip @loc.fieldkeys @loc.fieldlocs
-  | Tag loc.restenv =
-      case @rest of
-        Nothing -> Map.empty
-        Just restname -> Map.singleton (asKey restname) @loc.valloc
-  | Tag loc.newenv = @loc.restenv `Map.union` @loc.fieldenv `Map.union` @lhs.env
+  | Tag loc.newenv = @loc.fieldenv `Map.union` @lhs.env
   | Tag (loc.upvalueinstr, loc.upvaluemaxstack) = unzip $ map (readEnv @loc.newenv) @lhs.bodyupvalues
   | Tag lhs.instr =
       @loc.valinstr
