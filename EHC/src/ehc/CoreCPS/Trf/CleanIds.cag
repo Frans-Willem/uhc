@@ -1,0 +1,157 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%[(8 core) hs module {%{EH}CoreCPS.Trf.CleanIds} import({%{EH}CoreCPS}, {%{EH}Ty}, qualified Data.Set as Set, qualified Data.Map.Strict as Map, {%{EH}Base.HsName}, {%{EH}Base.UID}, Data.Maybe)
+%%]
+
+%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn}, {CoreCPS/CommonFV})
+WRAPPER CTmRoot
+%%]
+
+%%[(8 core) hs export(ctmTrfCleanIds)
+ctmTrfCleanIds :: CTm -> CTm
+ctmTrfCleanIds ctm
+  = let t = wrap_CTmRoot (sem_CTmRoot (CTmRoot_Root ctm))
+            (Inh_CTmRoot {})
+    in cTrf_Syn_CTmRoot t
+%%]
+
+%%[(8 core) hs
+extractCont :: ContName -> HsName
+extractCont (ContName n) = n
+
+extractThunk :: ThunkName -> HsName
+extractThunk (ThunkName n) = n
+
+extractValue :: ValueName -> HsName
+extractValue (ValueName n) = n
+
+extractVar :: CPSVar -> HsName
+extractVar (CPSValue v) = extractValue v
+extractVar (CPSThunk t) = extractThunk t
+extractVar (CPSCont c) = extractCont c
+
+trfName :: Map.Map HsName HsName -> HsName -> HsName
+trfName trf n = Map.findWithDefault n n trf
+
+trfCont :: Map.Map HsName HsName -> ContName -> ContName
+trfCont trf (ContName n) = ContName (trfName trf n)
+
+trfThunk :: Map.Map HsName HsName -> ThunkName -> ThunkName
+trfThunk trf (ThunkName n) = ThunkName (trfName trf n)
+
+trfValue :: Map.Map HsName HsName -> ValueName -> ValueName
+trfValue trf (ValueName n) = ValueName (trfName trf n)
+%%]
+
+%%[(8 core) hs
+createNewNames :: Maybe HsName -> [HsName] -> Map.Map HsName HsName
+createNewNames _ [] = Map.empty
+createNewNames (Just orig) [single] = Map.singleton single orig
+createNewNames mborig names =
+  let
+    indexes = [1..]
+    newUnqNames orig = map (\i -> hsnUniqifyInt HsNameUniqifier_GloballyUnique i orig) indexes
+    newIntNames = map (mkHNm . mkUID . (:[])) indexes
+    newNames = maybe newIntNames newUnqNames mborig
+  in 
+    Map.fromList (zip names newNames)
+
+stripName :: HsName -> Maybe HsName
+stripName n =
+  do
+    base <- hsnStripUniqify n
+    if (hsnIsBaseString base)
+      then Just base
+      else Nothing
+
+-- TODO: Keep external free names unchanged...
+createTranslationMap :: Set.Set HsName -> Set.Set HsName -> Map.Map HsName HsName
+createTranslationMap allNames freeNames =
+  let
+    nameList = Set.toList allNames
+    strippedNameList = map stripName nameList
+    stripMap = foldr (\(stripped,orig) -> Map.insertWith (++) stripped [orig]) Map.empty (zip strippedNameList nameList)
+    trfMap = foldr Map.union Map.empty (map snd (Map.toList (Map.mapWithKey createNewNames stripMap)))
+  in
+    trfMap
+%%]
+
+%%[(8 core) ag
+ATTR CTm CVal CBind CBindL CCaseBranch CCaseBranchL CCasePattern [ | | usedNames USE {Set.union} {Set.empty} : {Set.Set HsName} ]
+
+SEM CVal
+  | LamVal lhs.usedNames =
+      (Set.singleton (extractCont @bindcont))
+      `Set.union` (Set.fromList (map extractThunk @bindargs))
+      `Set.union` @body.usedNames
+  | TagVal lhs.usedNames =
+      Set.fromList (map extractThunk @args)
+
+SEM CBind
+  | ThunkBind lhs.usedNames =
+      (Set.singleton (extractThunk @thunkname))
+      `Set.union` (Set.singleton (extractCont @contname))
+      `Set.union` @body.usedNames
+  | ValBind lhs.usedNames =
+      (Set.singleton (extractValue @valname))
+      `Set.union` @value.usedNames
+
+SEM CCasePattern
+  | Tag lhs.usedNames = Set.fromList (map extractThunk @args)
+
+SEM CTm
+  | LetCont lhs.usedNames =
+      (Set.singleton (extractCont @contname))
+      `Set.union` (Set.singleton (extractValue @valname))
+      `Set.union` @bindbody.usedNames
+      `Set.union` @body.usedNames
+  | LetFFI lhs.usedNames =
+      (Set.singleton (extractValue @valname))
+      `Set.union` (Set.fromList (map extractValue @args))
+      `Set.union` @body.usedNames
+  | ContAppl lhs.usedNames =
+      (Set.singleton (extractCont @cont))
+      `Set.union` (Set.singleton (extractValue @val))
+  | ThunkEval lhs.usedNames =
+      (Set.singleton (extractThunk @thunk))
+      `Set.union` (Set.singleton (extractCont @cont))
+  | FuncAppl lhs.usedNames =
+      (Set.singleton (extractValue @func))
+      `Set.union` (Set.singleton (extractCont @cont))
+      `Set.union` (Set.fromList (map extractThunk @args))
+  | Exit lhs.usedNames =
+      (Set.singleton (extractValue @val))
+  | Case lhs.usedNames =
+      (Set.singleton (extractValue @val))
+      `Set.union` @branches.usedNames
+
+ATTR CTm CVal CBind CBindL CCaseBranch CCaseBranchL CCasePattern [ trfMap : {Map.Map HsName HsName} | | cTrf : SELF ]
+ATTR CTmRoot [ | | cTrf : CTm ]
+
+SEM CTmRoot
+  | Root root.trfMap = createTranslationMap @root.usedNames (Set.map extractVar @root.freeVars)
+
+SEM CVal
+  | LamVal lhs.cTrf = CVal_LamVal (trfCont @lhs.trfMap @bindcont) (map (trfThunk @lhs.trfMap) @bindargs) @body.cTrf
+  | TagVal lhs.cTrf = CVal_TagVal @tag (map (trfThunk @lhs.trfMap) @args)
+
+SEM CBind
+  | ThunkBind lhs.cTrf = CBind_ThunkBind (trfThunk @lhs.trfMap @thunkname) (trfCont @lhs.trfMap @contname) @body.cTrf
+  | ValBind lhs.cTrf = CBind_ValBind (trfValue @lhs.trfMap @valname) @value.cTrf
+
+SEM CCasePattern
+  | Tag lhs.cTrf = CCasePattern_Tag @tag (map (trfThunk @lhs.trfMap) @args)
+
+SEM CTm
+  | LetCont lhs.cTrf = CTm_LetCont (trfCont @lhs.trfMap @contname) (trfValue @lhs.trfMap @valname) @bindbody.cTrf @body.cTrf
+  | LetFFI lhs.cTrf = CTm_LetFFI (trfValue @lhs.trfMap @valname) @instr (map (trfValue @lhs.trfMap) @args) @ty @body.cTrf
+  | ContAppl lhs.cTrf = CTm_ContAppl (trfCont @lhs.trfMap @cont) (trfValue @lhs.trfMap @val)
+  | ThunkEval lhs.cTrf = CTm_ThunkEval (trfThunk @lhs.trfMap @thunk) (trfCont @lhs.trfMap @cont)
+  | FuncAppl lhs.cTrf = CTm_FuncAppl (trfValue @lhs.trfMap @func) (trfCont @lhs.trfMap @cont) (map (trfThunk @lhs.trfMap) @args)
+  | Exit lhs.cTrf = CTm_Exit (trfValue @lhs.trfMap @val)
+  | Case lhs.cTrf = CTm_Case (trfValue @lhs.trfMap @val) @branches.cTrf
+
+%%]

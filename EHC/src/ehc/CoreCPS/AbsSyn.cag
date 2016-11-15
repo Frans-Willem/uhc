@@ -68,4 +68,8 @@ DATA CTm
   | Case
       val : {ValueName}
       branches : CCaseBranchL
+
+DATA CTmRoot
+  | Root
+      root : CTm
 %%]

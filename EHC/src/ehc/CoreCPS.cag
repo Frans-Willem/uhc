@@ -6,7 +6,7 @@
 %%[(8 core) hs module {%{EH}CoreCPS} import({%{EH}Ty})
 %%]
 
-%%[(8 core) hs export( CVal(..), CTm(..), CBind(..), CBindL(..), ValueName(..), ContName(..), ThunkName(..), CTag(..), CCasePattern(..), CCaseBranch(..), CCaseBranchL(..))
+%%[(8 core) hs export( CVal(..), CTmRoot(..), CTm(..), CBind(..), CBindL(..), ValueName(..), ContName(..), ThunkName(..), CTag(..), CCasePattern(..), CCaseBranch(..), CCaseBranchL(..))
 %%]
 
 %%[(8 core) hs import({%{EH}CodeGen.Tag})
