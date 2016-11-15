@@ -40,12 +40,19 @@ instance PP ValueName where
 ATTR CTm [ | | pp : {PP_Doc} ]
 SEM CTm
   | LetCont lhs.pp
-      = (text "let cont" >#< @contname >#< @valname >#< text "=" >#< @bindbody.pp)
-        >-< (text "in" >#< @body.pp)
+      = @body.pp
+        >-< text "where" >#< text "cont" >#< @contname >#< @valname >#< text "="
+        >-< indent 2 @bindbody.pp
   | Let lhs.pp
-      = (text "let" >#< @binds.pp) >-< (text "in" >#< @body.pp)
+      = (text "let")
+        >-< (indent 2 @binds.pp)
+        >-< (text "in")
+        >-< (indent 2 @body.pp)
   | LetFFI lhs.pp
-      = ((text "let ffi") >#< @valname >#< (text "=") >#< (foldr1 (>#<) (ppParens ((text $ show @instr) >#< (text "::") >#< (pp @ty)) : map pp @args))) >-< ((text "in") >#< @body.pp)
+      = (text "let") >#< text "ffi" >#< @valname >#< text "="
+        >-< indent 2 (foldr1 (>#<) (ppParens ((text $ show @instr) >#< (text "::") >#< (pp @ty)) : map pp @args))
+        >-< (text "in")
+        >-< indent 2 @body.pp
   | ContAppl lhs.pp = @cont >#< @val >#< text "(cont-appl)"
   | ThunkEval lhs.pp = @thunk >#< @cont >#< text "(thunk-eval)"
   | FuncAppl lhs.pp = @func >#< @cont >#< (ppSpaces @args) >#< text "(func-appl)"
@@ -57,15 +64,21 @@ SEM CTm
 ATTR CBindL [ | | pp USE {>-<} {empty} : {PP_Doc} ]
 ATTR CBind [ | | pp : {PP_Doc} ]
 SEM CBind
-  | ThunkBind lhs.pp = (text "thunk") >#< @thunkname >#< @contname >#< (text "=") >#< @body.pp 
-  | ValBind lhs.pp = (text "val") >#< @valname >#< (text "=") >#< @value.pp
+  | ThunkBind lhs.pp =
+      (text "thunk") >#< @thunkname >#< @contname >#< (text "=")
+      >-< indent 2 @body.pp 
+  | ValBind lhs.pp =
+      (text "val") >#< @valname >#< (text "=")
+      >-< indent 2 @value.pp
 
 ATTR CVal [ | | pp : {PP_Doc} ]
 SEM CVal
   | IntVal lhs.pp = text "#Int" >#< @value
   | StringVal lhs.pp = text "#String" >#< @value
   | LamVal lhs.pp
-      = text "(\\" >|< @bindcont >#< (ppSpaces @bindargs) >#< text "->" >#< @body.pp >|< text ")"
+      = text "(\\" >|< @bindcont >#< (ppSpaces @bindargs) >#< text "->"
+        >-< indent 4 @body.pp
+        >-< text ")"
   | TagVal lhs.pp
       = text "#Tag" >#< ppSpaces ((pp @tag) : map pp @args)
 
