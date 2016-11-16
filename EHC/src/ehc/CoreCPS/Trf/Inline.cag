@@ -3,10 +3,10 @@
 %include afp.fmt
 %%]
 
-%%[(8 core) hs module {%{EH}CoreCPS.Trf.Inline} import({%{EH}CoreCPS}, {%{EH}Ty}, qualified Data.Map.Strict as Map, {%{EH}Base.HsName}, Data.Maybe)
+%%[(8 core) hs module {%{EH}CoreCPS.Trf.Inline} import({%{EH}CoreCPS}, {%{EH}Ty}, qualified Data.Map.Strict as Map, {%{EH}Base.HsName}, Data.Maybe, qualified Data.Set as Set)
 %%]
 
-%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn})
+%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn}, {CoreCPS/CommonFV})
 WRAPPER CTm
 %%]
 
@@ -15,7 +15,7 @@ ctmTrfInline :: CTm -> CTm
 ctmTrfInline ctm
   = let t = wrap_CTm (sem_CTm ctm)
             ( Inh_CTm
-              { replace_Inh_CTm = replaceMapEmpty
+              { inlineMap_Inh_CTm = inlineMapEmpty
               , inlineId_Inh_CTm = 0
               , nextInlineId_Inh_CTm = 1
               }
@@ -24,76 +24,132 @@ ctmTrfInline ctm
 %%]
 
 %%[(8 core) hs
-data ReplaceMap =
-  ReplaceMap
-    { valueReplace :: Map.Map ValueName (ValueName, Maybe ValueInlineInfo)
-    , contReplace :: Map.Map ContName (ContName, Maybe ContInlineInfo)
-    , thunkReplace :: Map.Map ThunkName (ThunkName, Maybe ThunkInlineInfo)
+data InlineMap =
+  InlineMap
+    { valueMap :: Map.Map ValueName (ValueName, Maybe (Bool, InlineMap, ValueInlineInfo))
+    , contMap :: Map.Map ContName (ContName, Maybe (Bool, InlineMap, ContInlineInfo))
+    , thunkMap :: Map.Map ThunkName (ThunkName, Maybe (Bool, InlineMap, ThunkInlineInfo))
     }
 
 data ValueInlineInfo
   = IntInlineInfo Int
   | StringInlineInfo String
-  | FuncInlineInfo CTm ReplaceMap ContName [ThunkName]
-  | TagInlineInfo CTag [(ThunkName, Maybe ThunkInlineInfo)]
-type ContInlineInfo = (CTm, ReplaceMap, ValueName)
-type ThunkInlineInfo = (CTm, ReplaceMap, ContName)
+  | FuncInlineInfo CTm ContName [ThunkName]
+  | TagInlineInfo CTag [(ThunkName, Maybe (Bool, InlineMap, ThunkInlineInfo))]
+type ContInlineInfo = (CTm, ValueName)
+type ThunkInlineInfo = (CTm, ContName)
 
-applyReplaceMap :: CTm -> ReplaceMap -> Int -> (CTm, Int)
-applyReplaceMap ctm rep inlineId
+applyInlineMap :: Bool -> CTm -> InlineMap -> Int -> (CTm, Bool, Int)
+applyInlineMap allowMulti ctm rep inlineId
   = let t = wrap_CTm (sem_CTm ctm)
             ( Inh_CTm
-              { replace_Inh_CTm = rep
+              { inlineMap_Inh_CTm = rep
               , inlineId_Inh_CTm = inlineId
               , nextInlineId_Inh_CTm = inlineId + 1
               }
             )
-    in (inlined_Syn_CTm t, nextInlineId_Syn_CTm t)
+    in (inlined_Syn_CTm t, (not allowMulti) || inlinedSingle_Syn_CTm t, nextInlineId_Syn_CTm t)
 
-infoValueName :: ReplaceMap -> ValueName -> (ValueName, Maybe ValueInlineInfo)
-infoValueName r v = Map.findWithDefault (v, Nothing) v (valueReplace r)
+setMapMaybe :: (Ord a, Ord b) => (a -> Maybe b) -> Set.Set a -> Set.Set b
+setMapMaybe f s = Set.map fromJust (Set.filter isJust (Set.map f s))
 
-infoContName :: ReplaceMap -> ContName -> (ContName, Maybe ContInlineInfo)
-infoContName r c = Map.findWithDefault (c, Nothing) c (contReplace r) 
+varSetToThunkSet :: VarSet -> Set.Set ThunkName
+varSetToThunkSet
+  = setMapMaybe toThunk
+  where
+    toThunk (CPSThunk t) = Just t
+    toThunk _ = Nothing
 
-infoThunkName :: ReplaceMap -> ThunkName -> (ThunkName, Maybe ThunkInlineInfo)
-infoThunkName r t = Map.findWithDefault (t, Nothing) t (thunkReplace r)
+varSetToValueSet :: VarSet -> Set.Set ValueName
+varSetToValueSet
+  = setMapMaybe toValue
+  where
+    toValue (CPSValue v) = Just v
+    toValue _ = Nothing
 
-replaceValueName :: ReplaceMap -> ValueName -> ValueName
+varSetToContSet :: VarSet -> Set.Set ContName
+varSetToContSet
+  = setMapMaybe toCont
+  where
+    toCont (CPSCont c) = Just c
+    toCont _ = Nothing
+
+mapRestrictKeys :: (Ord k) => Set.Set k -> Map.Map k a -> Map.Map k a
+mapRestrictKeys s m = Map.filterWithKey (\k _ -> k `Set.member` s) m
+
+voidSingle :: (a, Maybe (Bool, InlineMap, b)) -> (a, Maybe (Bool, InlineMap, b))
+voidSingle (oldId,Just (False,_,_)) = (oldId,Nothing)
+voidSingle (oldId, Just (True, env, inlineInfo)) = (oldId, Just (True, voidSingles env, inlineInfo))
+voidSingle all@(a,_) = all
+
+voidSingles :: InlineMap -> InlineMap
+voidSingles (InlineMap vr cr tr) = InlineMap (Map.map voidSingle vr) (Map.map voidSingle cr) (Map.map voidSingle tr)
+
+splitInlineMap :: InlineMap -> (VarSet, VarSet) -> (InlineMap, InlineMap)
+splitInlineMap orig (fvleft, fvright) =
+  let
+    fvBoth = Set.intersection fvleft fvright
+    fvLeftOnly = Set.difference fvleft fvright
+    fvRightOnly = Set.difference fvright fvleft
+    repFilter fv (InlineMap vr cr tr) = InlineMap (mapRestrictKeys (varSetToValueSet fv) vr) (mapRestrictKeys (varSetToContSet fv) cr) (mapRestrictKeys (varSetToThunkSet fv) tr)
+    mapLeftOnly = repFilter fvLeftOnly orig
+    mapRightOnly = repFilter fvRightOnly orig
+    mapBoth = repFilter fvBoth orig
+    mapBothStripped = voidSingles mapBoth
+  in
+    (inlineMapUnion mapLeftOnly mapBothStripped, inlineMapUnion mapRightOnly mapBothStripped)
+
+infoValueName :: InlineMap -> ValueName -> (ValueName, Maybe (Bool, InlineMap, ValueInlineInfo))
+infoValueName r v = Map.findWithDefault (v, Nothing) v (valueMap r)
+
+infoContName :: InlineMap -> ContName -> (ContName, Maybe (Bool, InlineMap, ContInlineInfo))
+infoContName r c = Map.findWithDefault (c, Nothing) c (contMap r) 
+
+infoThunkName :: InlineMap -> ThunkName -> (ThunkName, Maybe (Bool, InlineMap, ThunkInlineInfo))
+infoThunkName r t = Map.findWithDefault (t, Nothing) t (thunkMap r)
+
+replaceValueName :: InlineMap -> ValueName -> ValueName
 replaceValueName m v = fst (infoValueName m v)
 
-replaceContName :: ReplaceMap -> ContName -> ContName
+replaceContName :: InlineMap -> ContName -> ContName
 replaceContName m c = fst (infoContName m c)
 
-replaceThunkName :: ReplaceMap -> ThunkName -> ThunkName
+replaceThunkName :: InlineMap -> ThunkName -> ThunkName
 replaceThunkName m t = fst (infoThunkName m t)
 
-deleteValue :: ValueName -> ReplaceMap -> ReplaceMap
-deleteValue v r = r { valueReplace = Map.delete v (valueReplace r) }
+deleteValue :: ValueName -> InlineMap -> InlineMap
+deleteValue v r = r { valueMap = Map.delete v (valueMap r) }
 
-deleteCont :: ContName -> ReplaceMap -> ReplaceMap
-deleteCont c r = r { contReplace = Map.delete c (contReplace r) }
+deleteCont :: ContName -> InlineMap -> InlineMap
+deleteCont c r = r { contMap = Map.delete c (contMap r) }
 
-deleteThunk :: ThunkName -> ReplaceMap -> ReplaceMap
-deleteThunk t r = r { thunkReplace = Map.delete t (thunkReplace r) }
+deleteThunk :: ThunkName -> InlineMap -> InlineMap
+deleteThunk t r = r { thunkMap = Map.delete t (thunkMap r) }
 
-insertValue :: ValueName -> (ValueName, Maybe ValueInlineInfo) -> ReplaceMap -> ReplaceMap
-insertValue k v r = r { valueReplace = Map.insert k v (valueReplace r) }
+insertValue :: ValueName -> (ValueName, Maybe (Bool, InlineMap, ValueInlineInfo)) -> InlineMap -> InlineMap
+insertValue k v r = r { valueMap = Map.insert k v (valueMap r) }
 
-insertCont :: ContName -> (ContName, Maybe ContInlineInfo) -> ReplaceMap -> ReplaceMap
-insertCont k v r = r { contReplace = Map.insert k v (contReplace r) }
+insertCont :: ContName -> (ContName, Maybe (Bool, InlineMap, ContInlineInfo)) -> InlineMap -> InlineMap
+insertCont k v r = r { contMap = Map.insert k v (contMap r) }
 
-insertThunk :: ThunkName -> (ThunkName, Maybe ThunkInlineInfo) -> ReplaceMap -> ReplaceMap
-insertThunk k v r = r { thunkReplace = Map.insert k v (thunkReplace r) }
+insertThunk :: ThunkName -> (ThunkName, Maybe (Bool, InlineMap, ThunkInlineInfo)) -> InlineMap -> InlineMap
+insertThunk k v r = r { thunkMap = Map.insert k v (thunkMap r) }
 
-insertThunks :: [(ThunkName, (ThunkName, Maybe ThunkInlineInfo))] -> ReplaceMap -> ReplaceMap
-insertThunks t r = r { thunkReplace = ((Map.fromList t) `Map.union` (thunkReplace r)) }
+insertThunks :: [(ThunkName, (ThunkName, Maybe (Bool, InlineMap, ThunkInlineInfo)))] -> InlineMap -> InlineMap
+insertThunks t r = r { thunkMap = ((Map.fromList t) `Map.union` (thunkMap r)) }
 
-replaceUnion :: ReplaceMap -> ReplaceMap -> ReplaceMap
-replaceUnion (ReplaceMap a1 a2 a3) (ReplaceMap b1 b2 b3) = ReplaceMap (Map.union a1 b1) (Map.union a2 b2) (Map.union a3 b3)
+inlineMapUnion :: InlineMap -> InlineMap -> InlineMap
+inlineMapUnion (InlineMap a1 a2 a3) (InlineMap b1 b2 b3) = InlineMap (Map.union a1 b1) (Map.union a2 b2) (Map.union a3 b3)
 
-replaceMapEmpty :: ReplaceMap
-replaceMapEmpty = ReplaceMap Map.empty Map.empty Map.empty
+inlineMapEmpty :: InlineMap
+inlineMapEmpty = InlineMap Map.empty Map.empty Map.empty
+
+inlineMapSingleValue :: ValueName -> (ValueName, Maybe (Bool, InlineMap, ValueInlineInfo)) -> InlineMap
+inlineMapSingleValue v vi = InlineMap (Map.singleton v vi) Map.empty Map.empty
+inlineMapSingleCont :: ContName -> (ContName, Maybe (Bool, InlineMap, ContInlineInfo)) -> InlineMap
+inlineMapSingleCont c ci = InlineMap Map.empty (Map.singleton c ci) Map.empty
+inlineMapSingleThunk :: ThunkName -> (ThunkName, Maybe (Bool, InlineMap, ThunkInlineInfo)) -> InlineMap
+inlineMapSingleThunk t ti = InlineMap Map.empty Map.empty (Map.singleton t ti)
 %%]
 
 %%[(8 core) hs
@@ -108,138 +164,112 @@ trfThunkName (ThunkName hsn) n = ThunkName (hsnUniqifyInt HsNameUniqifier_Inline
 %%]
 
 %%[(8 core)
-ATTR CTm CVal CThunkBind CThunkBindL CCasePattern CCaseBranch CCaseBranchL [ replace : {ReplaceMap} | | ]
-ATTR CTm CVal CThunkBind CThunkBindL CCasePattern CCaseBranch CCaseBranchL [ inlineId : {Int} | nextInlineId : {Int} | ]
-ATTR CTm CVal CThunkBind CThunkBindL CCasePattern CCaseBranch CCaseBranchL [ | | inlined : SELF original: SELF ]
+{-
+-- When to inline?
+-}
 
-ATTR CVal [ | | inlineInfo : {Maybe ValueInlineInfo} ]
+ATTR CTm [ | | isSingleStatement : {Bool} ]
+SEM CTm
+  | ContAppl loc.isSingleStatement = True
+  | ThunkEval loc.isSingleStatement = True
+  | FuncAppl loc.isSingleStatement = True
+  | Exit loc.isSingleStatement = True
+  | * - ContAppl ThunkEval FuncAppl Exit loc.isSingleStatement = False
 
-SEM CVal
-  | IntVal lhs.inlineInfo = Just (IntInlineInfo @value)
-  | StringVal lhs.inlineInfo = Just (StringInlineInfo @value)
-SEM CVal
-  | LamVal loc.newBindCont = trfContName @bindcont @lhs.inlineId
-  | LamVal loc.newBindArgs = map (\x -> trfThunkName x @lhs.inlineId) @bindargs
-  | LamVal loc.replace =
-      insertCont
-        @bindcont
-        (@loc.newBindCont, Nothing)
-        ( insertThunks
-            (zip @bindargs (map (\x -> (x,Nothing)) @loc.newBindArgs))
-            @lhs.replace
-        )
-  | LamVal body.replace = @loc.replace
-  | LamVal lhs.inlineInfo =
-      case @loc.shouldInline of
-        False -> Nothing
-        True -> Just (FuncInlineInfo @body.original @loc.replace @bindcont @bindargs)
-  | LamVal lhs.inlined = CVal_LamVal @loc.newBindCont @loc.newBindArgs @body.inlined
-SEM CVal
-  | TagVal lhs.inlineInfo = Just (TagInlineInfo @tag (map (infoThunkName @lhs.replace) @args))
-  | TagVal lhs.inlined = CVal_TagVal @tag (map (replaceThunkName @lhs.replace) @args)
+ATTR CBind CBindL [ | | isOnlyValues USE {&&} {True} : {Bool} ]
+SEM CBind
+  | ValBind lhs.isOnlyValues = True
+  | * - ValBind lhs.isOnlyValues = False
 
-SEM CVal
-  | FFIVal lhs.inlineInfo = Nothing
-  | FFIVal lhs.inlined = CVal_FFIVal @instr (map (replaceValueName @lhs.replace) @args) @ty
+ATTR CTm [ | | isSinglePlusVal : {Bool} ]
+SEM CTm
+  | Let lhs.isSinglePlusVal = @body.isSingleStatement && @binds.isOnlyValues
+  | * - Let lhs.isSinglePlusVal = @loc.isSingleStatement
 
 SEM CTm
-  | LetVal loc.newBindName = trfValueName @bindname @lhs.inlineId
-  | LetVal body.replace = insertValue @bindname (@loc.newBindName, @bindvalue.inlineInfo) @lhs.replace
-  | LetVal lhs.inlined = CTm_LetVal @loc.newBindName @bindvalue.inlined @body.inlined
+  | LetCont loc.shouldInline = True -- @bindbody.isSingleStatement
+  | LetCont loc.allowMultiInline = False -- @bindbody.isSingleStatement
 
+
+SEM CVal
+  | IntVal StringVal loc.shouldInline = True
+  | IntVal StringVal loc.allowMultiInline = True
+  | LamVal loc.allowMultiInline = not @body.inlinedSingle
+  | LamVal loc.shouldInline = @body.isSinglePlusVal
+  | TagVal loc.shouldInline = True
+  | TagVal loc.allowMultiInline = False
+
+ATTR CBind CVal [ | | shouldInline : {Bool} allowMultiInline : {Bool} ]
+SEM CBind
+  | ThunkBind loc.shouldInline = @body.isSingleStatement
+  | ThunkBind loc.allowMultiInline = not @body.inlinedSingle
+  | ValBind loc.shouldInline = @value.shouldInline
+  | ValBind loc.allowMultiInline = @value.allowMultiInline
+%%]
+
+%%[(8 core)
+ATTR CTm CVal CBind CBindL CCasePattern CCaseBranch CCaseBranchL [ inlineMap : {InlineMap} | | ]
+ATTR CTm CVal CBind CBindL CCasePattern CCaseBranch CCaseBranchL [ inlineId : {Int} | nextInlineId : {Int} | ]
+ATTR CTm CVal CBind CBindL CCasePattern CCaseBranch CCaseBranchL [ | | inlined : SELF original: SELF ]
+-- Did we inline something that's marked as "can only be inlined once" ?
+ATTR CTm CVal CBind CBindL CCasePattern CCaseBranch CCaseBranchL [ | | inlinedSingle USE {||} {False} : {Bool} ]
+%%]
+
+%%[(8 core)
+{-
+-- Using of inline information
+-}
 SEM CTm
-  | LetCont loc.newContName = trfContName @contname @lhs.inlineId
-  | LetCont loc.newValName = trfValueName @valname @lhs.inlineId
-  | LetCont loc.contReplace = insertValue @valname (@loc.newValName, Nothing) @lhs.replace
-  | LetCont bindbody.replace = @loc.contReplace
-  | LetCont loc.inlineInfo =
-      case @loc.shouldInline of
-        False -> Nothing
-        True -> Just (@bindbody.original, @loc.contReplace, @valname)
-  | LetCont body.replace =
-      insertCont @contname (@loc.newContName, @loc.inlineInfo) @lhs.replace
-  | LetCont lhs.inlined =
-      CTm_LetCont @loc.newContName @loc.newValName @bindbody.inlined @body.inlined
-
-SEM CTm
-  | LetThunk binds.replace =
-      ( foldr
-        (\(x,y) -> insertThunk x (y, Nothing))
-        @lhs.replace
-        (zip @binds.names @binds.newNames)
-      )
-  | LetThunk body.replace =
-      ( foldr
-        (\(x,y) -> insertThunk x y)
-        @lhs.replace
-        (zip @binds.names (zip @binds.newNames @binds.inlines))
-      )
-
-ATTR CThunkBind [ | | inlines : {Maybe ThunkInlineInfo} ]
-ATTR CThunkBind [ | | names : {ThunkName} ]
-ATTR CThunkBind [ | | newNames : {ThunkName} ]
-ATTR CThunkBindL [ | | inlines USE {:} {[]} : {[Maybe ThunkInlineInfo]} ]
-ATTR CThunkBindL [ | | names USE {:} {[]} : {[ThunkName]} ]
-ATTR CThunkBindL [ | | newNames USE {:} {[]} : {[ThunkName]} ]
-
-SEM CThunkBind
-  | ThunkBind lhs.names = @thunkname
-  | ThunkBind loc.newThunkName = trfThunkName @thunkname @lhs.inlineId
-  | ThunkBind loc.newContName = trfContName @contname @lhs.inlineId
-  | ThunkBind lhs.newNames = @loc.newThunkName
-  | ThunkBind lhs.inlines =
-      case @loc.shouldInline of
-        False -> Nothing
-        True -> Just (@body.original, @lhs.replace, @contname)
-  | ThunkBind body.replace = insertCont @contname (@loc.newContName, Nothing) @lhs.replace
-  | ThunkBind lhs.inlined = CThunkBind_ThunkBind @loc.newThunkName @loc.newContName @body.inlined
-
-SEM CTm
-  | ContAppl (loc.newContName, loc.contInline) = infoContName @lhs.replace @cont
-  | ContAppl loc.valInfo = infoValueName @lhs.replace @val
-  | ContAppl (lhs.inlined, lhs.nextInlineId) =
+  | ContAppl (loc.newContName, loc.contInline) = infoContName @lhs.inlineMap @cont
+  | ContAppl loc.valInfo = infoValueName @lhs.inlineMap @val
+  | ContAppl (lhs.inlined, lhs.inlinedSingle, lhs.nextInlineId) =
       case @loc.contInline of
         Nothing ->
           ( CTm_ContAppl
             @loc.newContName
             (fst @loc.valInfo)
+          , False
           , @lhs.nextInlineId
           )
-        Just (body, replace, valname) ->
-          applyReplaceMap
+        Just (allowMulti, env, (body, valname)) ->
+          applyInlineMap
+            allowMulti
             body
-            (insertValue valname @loc.valInfo replace)
+            (insertValue valname @loc.valInfo env)
             @lhs.nextInlineId
 
 SEM CTm
-  | ThunkEval (loc.newThunkName, loc.thunkInline) = infoThunkName @lhs.replace @thunk
-  | ThunkEval loc.contInfo = infoContName @lhs.replace @cont
-  | ThunkEval (lhs.inlined, lhs.nextInlineId) =
+  | ThunkEval (loc.newThunkName, loc.thunkInline) = infoThunkName @lhs.inlineMap @thunk
+  | ThunkEval loc.contInfo = infoContName @lhs.inlineMap @cont
+  | ThunkEval (lhs.inlined, lhs.inlinedSingle, lhs.nextInlineId) =
       case @loc.thunkInline of
         Nothing ->
           ( CTm_ThunkEval
             @loc.newThunkName
             (fst @loc.contInfo)
+          , False
           , @lhs.nextInlineId
           )
-        Just (body, replace, contname) ->
-          applyReplaceMap
+        Just (allowMulti, env, (body, contname)) ->
+          applyInlineMap
+            allowMulti
             body
-            (insertCont contname @loc.contInfo replace)
+            (insertCont contname @loc.contInfo env)
             @lhs.nextInlineId
 
 SEM CTm
-  | FuncAppl (loc.newFuncName, loc.funcInline) = infoValueName @lhs.replace @func
-  | FuncAppl loc.contInfo = infoContName @lhs.replace @cont
-  | FuncAppl loc.argsInfo = map (infoThunkName @lhs.replace) @args
-  | FuncAppl (lhs.inlined, lhs.nextInlineId) =
+  | FuncAppl (loc.newFuncName, loc.funcInline) = infoValueName @lhs.inlineMap @func
+  | FuncAppl loc.contInfo = infoContName @lhs.inlineMap @cont
+  | FuncAppl loc.argsInfo = map (infoThunkName @lhs.inlineMap) @args
+  | FuncAppl (lhs.inlined, lhs.inlinedSingle, lhs.nextInlineId) =
       case @loc.funcInline of
-        Just (FuncInlineInfo body replace contname argnames) ->
-          applyReplaceMap
+        Just (allowMulti, env, FuncInlineInfo body contname argnames) ->
+          applyInlineMap
+            allowMulti
             body
             ( foldr
               (\(k, v) m -> insertThunk k v m)
-              (insertCont contname @loc.contInfo replace)
+              (insertCont contname @loc.contInfo env)
               (zip argnames @loc.argsInfo)
             )
             @lhs.nextInlineId
@@ -248,61 +278,99 @@ SEM CTm
             @loc.newFuncName
             (fst @loc.contInfo)
             (map fst @loc.argsInfo)
+          , False
           , @lhs.nextInlineId
           ) 
 
 SEM CTm
-  | Exit loc.newValName = replaceValueName @lhs.replace @val
+  | Exit loc.newValName = replaceValueName @lhs.inlineMap @val
   | Exit lhs.inlined = CTm_Exit @loc.newValName
 
--- TODO: Update replacemap in case branches to delete pattern arguments.
--- TODO: Case
-
-{-
--- When to inline?
--}
-
-ATTR CVal [ | | isSimpleValue : {Bool} ]
-SEM CVal
-  | IntVal StringVal TagVal FFIVal lhs.isSimpleValue = True
-  | LamVal lhs.isSimpleValue = False
-
-ATTR CTm [ | | isThunkEval : {Bool} ]
 SEM CTm
-  | ThunkEval lhs.isThunkEval = True
-  | * - ThunkEval lhs.isThunkEval = False
+  | Case loc.newValName = replaceValueName @lhs.inlineMap @val
+  | Case branches.inlineMap = insertValue @val (@loc.newValName, Nothing) @lhs.inlineMap
+  | Case lhs.inlined = CTm_Case @loc.newValName @branches.inlined
+%%]
 
-ATTR CTm [ | | isContAppl : {Bool} ]
-SEM CTm
-  | ContAppl lhs.isContAppl = True
-  | * - ContAppl lhs.isContAppl = False
+%%[(8 core)
+{- Propagation of inline info -}
 
-ATTR CTm [ | | isSimpleValContAppl : {Bool} ]
-SEM CTm
-  | LetVal lhs.isSimpleValContAppl = @bindvalue.isSimpleValue && @body.isContAppl
-  | ContAppl lhs.isSimpleValContAppl = True
-  | * - LetVal ContAppl lhs.isSimpleValContAppl = False
-
-ATTR CTm [ | | isExit : {Bool} ]
-SEM CTm
-  | Exit lhs.isExit = True
-  | * - Exit lhs.isExit = False
-
-ATTR CTm [ | | isSimpleValExit : {Bool} ]
-SEM CTm
-  | LetVal lhs.isSimpleValExit = @bindvalue.isSimpleValue && @body.isExit
-  | Exit lhs.isSimpleValExit = True
-  | * - LetVal Exit lhs.isSimpleValExit = False
-  
-
-SEM CTm
-  | LetCont loc.shouldInline = @bindbody.isSimpleValExit
-
-SEM CThunkBind
-  | ThunkBind loc.shouldInline = @body.isThunkEval || @body.isSimpleValContAppl
+ATTR CVal [ | | inlineInfo : {Maybe (Bool, ValueInlineInfo)} ]
 
 SEM CVal
-  | LamVal loc.shouldInline = False
+  | IntVal lhs.inlineInfo = Just (@loc.allowMultiInline, IntInlineInfo @value)
+  | StringVal lhs.inlineInfo = Just (@loc.allowMultiInline, StringInlineInfo @value)
 
+SEM CVal
+  | LamVal loc.newBindCont = trfContName @bindcont @lhs.inlineId
+  | LamVal loc.newBindArgs = map (\x -> trfThunkName x @lhs.inlineId) @bindargs
+  | LamVal body.inlineMap =
+      insertCont
+        @bindcont
+        (@loc.newBindCont, Nothing)
+        ( insertThunks
+            (zip @bindargs (map (\x -> (x,Nothing)) @loc.newBindArgs))
+            @lhs.inlineMap
+        )
+  | LamVal lhs.inlineInfo =
+      case @loc.shouldInline of
+        False -> Nothing
+        True -> Just (@loc.allowMultiInline, FuncInlineInfo @body.original @bindcont @bindargs)
+  | LamVal lhs.inlined = CVal_LamVal @loc.newBindCont @loc.newBindArgs @body.inlined
+
+SEM CVal
+  | TagVal lhs.inlineInfo = Just (@loc.allowMultiInline, TagInlineInfo @tag (map (infoThunkName @lhs.inlineMap) @args))
+  | TagVal lhs.inlined = CVal_TagVal @tag (map (replaceThunkName @lhs.inlineMap) @args)
+
+SEM CTm
+  | LetCont loc.newContName = trfContName @contname @lhs.inlineId
+  | LetCont loc.newValName = trfValueName @valname @lhs.inlineId
+  | LetCont (loc.newBindInlineMap, loc.newBodyInlineMap) = splitInlineMap @lhs.inlineMap (varSetDeleteValue @valname @bindbody.freeVars, varSetDeleteCont @contname @body.freeVars)
+  | LetCont bindbody.inlineMap = insertValue @valname (@loc.newValName,Nothing) @loc.newBindInlineMap
+  | LetCont loc.inlineInfo =
+      case @loc.shouldInline of
+        False -> Nothing
+        True -> Just (@loc.allowMultiInline, @loc.newBindInlineMap,(@bindbody.original, @valname))
+  | LetCont body.inlineMap =
+      insertCont @contname (@loc.newContName, @loc.inlineInfo) @lhs.inlineMap
+  | LetCont lhs.inlined =
+      CTm_LetCont @loc.newContName @loc.newValName @bindbody.inlined @body.inlined
+
+SEM CTm
+  | LetFFI loc.newValName = trfValueName @valname @lhs.inlineId
+  | LetFFI loc.newArgs = map (replaceValueName @lhs.inlineMap) @args
+  | LetFFI body.inlineMap = insertValue @valname (@loc.newValName, Nothing) @lhs.inlineMap
+  | LetFFI lhs.inlined = CTm_LetFFI @loc.newValName @instr @loc.newArgs @ty @body.inlined
+
+SEM CTm
+  | Let loc.newInlineMap = @binds.newInlineMap `inlineMapUnion` @lhs.inlineMap
+  | Let (binds.inlineMap, body.inlineMap) = splitInlineMap @loc.newInlineMap (@binds.nonRecFreeVars, @body.freeVars)
+
+ATTR CBindL [ | | nonRecFreeVars : {VarSet} ]
+SEM CBindL
+  | Nil lhs.freeVarsPerBind = Set.empty
+  | Nil lhs.nonRecFreeVars = varSetEmpty
+  | Cons loc.hdNonRecFreeVars = @hd.freeVars `Set.difference` @hd.boundVars
+  | Cons lhs.nonRecFreeVars = @loc.hdNonRecFreeVars `Set.union` @tl.nonRecFreeVars
+
+SEM CBindL
+  | Cons (hd.inlineMap, tl.inlineMap) = splitInlineMap @lhs.inlineMap (@loc.hdNonRecFreeVars, @tl.nonRecFreeVars)
+
+ATTR CBind CBindL [ | | newInlineMap USE {inlineMapUnion} {inlineMapEmpty} : {InlineMap} ]
+SEM CBind
+  | ThunkBind loc.newThunkName = trfThunkName @thunkname @lhs.inlineId
+  | ThunkBind loc.newContName = trfContName @contname @lhs.inlineId
+  | ThunkBind lhs.newInlineMap =
+      case @loc.shouldInline of
+        False -> inlineMapSingleThunk @thunkname (@loc.newThunkName, Nothing)
+        True -> inlineMapSingleThunk @thunkname (@loc.newThunkName, Just (@loc.allowMultiInline, @lhs.inlineMap, (@body.original, @contname)))
+  | ThunkBind body.inlineMap = insertCont @contname (@loc.newContName, Nothing) @lhs.inlineMap
+  | ThunkBind lhs.inlined = CBind_ThunkBind @loc.newThunkName @loc.newContName @body.inlined
+
+SEM CBind
+  | ValBind loc.newValName = trfValueName @valname @lhs.inlineId
+  | ValBind lhs.newInlineMap =
+      inlineMapSingleValue @valname (@loc.newValName, fmap (\(allowMulti, info) -> (allowMulti, @lhs.inlineMap, info)) @value.inlineInfo)
+  | ValBind lhs.inlined = CBind_ValBind @loc.newValName @value.inlined
 %%]
 
