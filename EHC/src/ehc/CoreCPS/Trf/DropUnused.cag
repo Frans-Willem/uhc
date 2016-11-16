@@ -22,12 +22,22 @@ ctmTrfDropUnused ctm
 %%[(8 core)
 ATTR CTm CVal CBind CBindL CCasePattern CCaseBranch CCaseBranchL [ | | dropunused : SELF ]
 SEM CTm
+  | LetCont loc.dropped = varSetContMember @contname @body.freeVars
   | LetCont lhs.dropunused =
-      case (varSetContMember @contname @body.freeVars) of
-        True -> CTm_LetCont @contname @valname @bindbody.dropunused @body.dropunused
-        False -> @body.dropunused
+      if @loc.dropped
+        then CTm_LetCont @contname @valname @bindbody.dropunused @body.dropunused
+        else @body.dropunused
+  | LetCont lhs.freeVars =
+      if @loc.dropped
+        then @loc.freeVars
+        else @body.freeVars
+  | Let loc.dropped = varSetNull (@body.freeVars `varSetIntersection` @binds.boundVars)
   | Let lhs.dropunused = 
-      case (varSetNull (@body.freeVars `varSetIntersection` @binds.boundVars)) of
-        False -> CTm_Let @binds.dropunused @body.dropunused
-        True -> @body.dropunused
+      if @loc.dropped
+        then @body.dropunused
+        else CTm_Let @binds.dropunused @body.dropunused
+  | Let lhs.freeVars =
+      if @loc.dropped
+        then @body.freeVars
+        else @loc.freeVars
 %%]
