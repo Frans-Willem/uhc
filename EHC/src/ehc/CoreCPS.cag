@@ -3,7 +3,7 @@
 %include afp.fmt
 %%]
 
-%%[(8 core) hs module {%{EH}CoreCPS} import({%{EH}Ty})
+%%[(8 core) hs module {%{EH}CoreCPS} import({%{EH}Ty}, qualified Data.Set as Set)
 %%]
 
 %%[(8 core) hs export( CVal(..), CTmRoot(..), CTm(..), CBind(..), CBindL(..), ValueName(..), ContName(..), ThunkName(..), CTag(..), CCasePattern(..), CCaseBranch(..), CCaseBranchL(..))
@@ -31,4 +31,61 @@ deriving instance Ord ThunkName
 deriving instance Eq ValueName
 deriving instance Eq ContName
 deriving instance Eq ThunkName
+%%]
+
+%%[(8 core) hs export(CPSVar(..), VarSet(..), varSetEmpty, varSetSingleThunk, varSetSingleValue, varSetSingleCont, varSetFromThunkList, varSetFromValueList, varSetDeleteThunk, varSetDeleteValue, varSetDeleteCont, varSetUnion, varSetDifference, varSetIntersection, varSetNull, varSetThunkMember, varSetValueMember, varSetContMember)
+
+data CPSVar
+  = CPSValue ValueName
+  | CPSThunk ThunkName
+  | CPSCont ContName
+  deriving (Eq, Ord)
+
+type VarSet = Set.Set CPSVar
+
+varSetEmpty :: VarSet
+varSetEmpty = Set.empty
+
+varSetSingleThunk :: ThunkName -> VarSet
+varSetSingleThunk = Set.singleton . CPSThunk
+
+varSetSingleValue :: ValueName -> VarSet
+varSetSingleValue = Set.singleton . CPSValue
+
+varSetSingleCont :: ContName -> VarSet
+varSetSingleCont = Set.singleton . CPSCont
+
+varSetFromThunkList :: [ThunkName] -> VarSet
+varSetFromThunkList = Set.fromList . (map CPSThunk)
+
+varSetFromValueList :: [ValueName] -> VarSet
+varSetFromValueList = Set.fromList . (map CPSValue)
+
+varSetDeleteThunk :: ThunkName -> VarSet -> VarSet
+varSetDeleteThunk = Set.delete . CPSThunk
+
+varSetDeleteValue :: ValueName -> VarSet -> VarSet
+varSetDeleteValue = Set.delete . CPSValue
+
+varSetDeleteCont :: ContName -> VarSet -> VarSet
+varSetDeleteCont = Set.delete . CPSCont
+
+varSetUnion :: VarSet -> VarSet -> VarSet
+varSetUnion = Set.union
+
+varSetDifference :: VarSet -> VarSet -> VarSet
+varSetDifference = Set.difference
+
+varSetIntersection :: VarSet -> VarSet -> VarSet
+varSetIntersection = Set.intersection
+
+varSetNull :: VarSet -> Bool
+varSetNull = Set.null
+
+varSetThunkMember :: ThunkName -> VarSet -> Bool
+varSetThunkMember = Set.member . CPSThunk
+varSetValueMember :: ValueName -> VarSet -> Bool
+varSetValueMember = Set.member . CPSValue
+varSetContMember :: ContName -> VarSet -> Bool
+varSetContMember = Set.member . CPSCont
 %%]
