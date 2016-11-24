@@ -1,0 +1,30 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%[(8 core) hs module {%{EH}CoreCPS.Trf.PushLet} import ({%{EH}CoreCPS}, {%{EH}Ty}, qualified Data.Set as Set, Data.Maybe, qualified Data.Map as Map, {%{EH}CoreCPS.Trf.PushLet2})
+%%]
+
+%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn}, {CoreCPS/CommonFV})
+WRAPPER CTm
+%%]
+
+%%[(8 core) hs export(ctmTrfPushLet)
+ctmTrfPushLet :: CTm -> CTm
+ctmTrfPushLet ctm =
+  let t = wrap_CTm (sem_CTm ctm)
+          ( Inh_CTm
+            {
+            }
+          )
+  in ctrf_Syn_CTm t
+%%]
+
+%%[(8 core)
+ATTR CTm CVal CBind CBindL CCaseBranch CCaseBranchL CCasePattern [ | | ctrf : SELF ]
+
+SEM CTm
+  | Let lhs.ctrf = ctmTrfInjectLet @binds.boundVars (CTm_Let @binds.ctrf) @body.ctrf
+  | LetCont lhs.ctrf = ctmTrfInjectLet (varSetSingleCont @contname) (CTm_LetCont @contname @valname @bindbody.ctrf) @body.ctrf
+%%]

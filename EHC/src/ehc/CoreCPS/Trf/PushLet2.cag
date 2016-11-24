@@ -1,0 +1,138 @@
+%%[0 lhs2tex
+%include lhs2TeX.fmt
+%include afp.fmt
+%%]
+
+%%[(8 core) hs module {%{EH}CoreCPS.Trf.PushLet2} import ({%{EH}CoreCPS}, {%{EH}Ty}, qualified Data.Set as Set, Data.Maybe, qualified Data.Map as Map)
+%%]
+%%[(8 core).WRAPPER ag import({CoreCPS/AbsSyn}, {CoreCPS/CommonFV})
+WRAPPER CTm
+%%]
+
+%%[(8 core) hs export(ctmTrfInjectLet)
+data InjectInfo = InjectInfo { injectVars :: VarSet, injectApply :: CTm -> CTm }
+
+injectInfoEmpty = InjectInfo Set.empty id
+
+ctmTrfInjectLet :: VarSet -> (CTm -> CTm) -> CTm -> CTm
+ctmTrfInjectLet boundVars bind ctm =
+  let t = wrap_CTm (sem_CTm ctm)
+          ( Inh_CTm
+            { injectInfo_Inh_CTm = InjectInfo boundVars bind
+            }
+          )
+  in injectApplied_Syn_CTm t
+
+shouldApplyHere :: InjectInfo -> [VarSet] -> (Bool, [InjectInfo])
+shouldApplyHere info branchFreeVars =
+  let
+    branchUsage = map (\freeVars -> not $ Set.null $ Set.intersection (injectVars info) freeVars) branchFreeVars
+    numUsed = length (filter (==True) branchUsage)
+  in
+    if numUsed > 1
+      then (True, repeat injectInfoEmpty)
+      else (False, map (\used -> if used then info else injectInfoEmpty) branchUsage)
+%%]
+
+%%[(8 core)
+ATTR CTm [ injectInfo : {InjectInfo} | | ]
+ATTR CTm CBind CBindL CCaseBranch CCaseBranchL CCasePattern CVal [ | | injectApplied : SELF ]
+
+SEM CVal
+  | LamVal body.injectInfo = injectInfoEmpty
+
+SEM CTm
+  | LetCont loc.needInBind = not $ Set.null $ Set.intersection (injectVars @lhs.injectInfo) @bindbody.freeVars
+  | LetCont loc.needInBody = not $ Set.null $ Set.intersection (injectVars @lhs.injectInfo) @body.freeVars
+  | LetCont bindbody.injectInfo =
+      case (@loc.needInBind, @loc.needInBody) of
+        (True, False) -> @lhs.injectInfo
+        _ -> injectInfoEmpty
+  | LetCont body.injectInfo =
+      case (@loc.needInBind, @loc.needInBody) of
+        (False, True) -> @lhs.injectInfo
+        _ -> injectInfoEmpty
+  | LetCont loc.preapply = CTm_LetCont @contname @valname @bindbody.injectApplied @body.injectApplied
+  | LetCont lhs.injectApplied =
+      case (@loc.needInBind, @loc.needInBody) of
+        (True, True) -> injectApply @lhs.injectInfo @loc.preapply
+        _ -> @loc.preapply
+
+SEM CTm
+  | LetFFI loc.needInFFI = not $ Set.null $ Set.intersection (injectVars @lhs.injectInfo) (varSetFromValueList @args)
+  | LetFFI body.injectInfo =
+      if @loc.needInFFI == False
+        then @lhs.injectInfo
+        else injectInfoEmpty
+  | LetFFI loc.preapply = CTm_LetFFI @valname @instr @args @ty @body.injectApplied
+  | LetFFI lhs.injectApplied =
+      if @loc.needInFFI
+        then injectApply @lhs.injectInfo @loc.preapply
+        else @loc.preapply
+
+{- TODO: Let -}
+ATTR CBind CBindL [ | | thunkFreeVars USE {++} {[]} : {[VarSet]} valueFreeVars USE {varSetUnion} {varSetEmpty} : {VarSet} ]
+SEM CBind
+  | ThunkBind lhs.thunkFreeVars = [@loc.freeVars]
+  | ValBind lhs.valueFreeVars = @value.freeVars
+
+ATTR CBind CBindL [ | injectInfo : {[InjectInfo]} | ]
+SEM CBind
+  | ThunkBind body.injectInfo = head @lhs.injectInfo
+  | ThunkBind lhs.injectInfo = tail @lhs.injectInfo
+
+
+SEM CTm
+  | Let loc.needValueApply = not $ Set.null $ Set.intersection (injectVars @lhs.injectInfo) @binds.valueFreeVars
+  | Let (loc.needBranchesApply, loc.branchInfo) = shouldApplyHere @lhs.injectInfo (@body.freeVars : @binds.thunkFreeVars)
+  | Let loc.needApply = @loc.needValueApply || @loc.needBranchesApply
+  | Let loc.preapply = CTm_Let @binds.injectApplied @body.injectApplied
+  | Let lhs.injectApplied =
+      if @loc.needApply
+        then injectApply @lhs.injectInfo @loc.preapply
+        else @loc.preapply
+  | Let body.injectInfo =
+      if @loc.needValueApply
+        then injectInfoEmpty
+        else head @loc.branchInfo
+  | Let binds.injectInfo =
+      if @loc.needValueApply
+        then repeat injectInfoEmpty
+        else tail @loc.branchInfo
+
+{- Simple -}
+SEM CTm
+  | ContAppl ThunkEval FuncAppl Exit loc.needApply = not $ Set.null $ Set.intersection (injectVars @lhs.injectInfo) @loc.freeVars
+  | ContAppl loc.preapply = CTm_ContAppl @cont @val
+  | ThunkEval loc.preapply = CTm_ThunkEval @thunk @cont
+  | FuncAppl loc.preapply = CTm_FuncAppl @func @cont @args
+  | Exit loc.preapply = CTm_Exit @val
+  | ContAppl ThunkEval FuncAppl Exit lhs.injectApplied =
+      if @loc.needApply
+        then injectApply @lhs.injectInfo @loc.preapply
+        else @loc.preapply
+
+{- Case -}
+ATTR CCaseBranch CCaseBranchL [ | | branchFreeVars USE {++} {[]} : {[VarSet]} ]
+SEM CCaseBranch
+  | CaseBranch lhs.branchFreeVars = [@loc.freeVars]
+
+ATTR CCaseBranch CCaseBranchL [ | injectInfo : {[InjectInfo]} | ]
+SEM CCaseBranch
+  | CaseBranch body.injectInfo = head @lhs.injectInfo
+  | CaseBranch lhs.injectInfo = tail @lhs.injectInfo
+
+SEM CTm
+  | Case loc.needValueApply = not $ Set.null $ Set.intersection (injectVars @lhs.injectInfo) (varSetSingleValue @val)
+  | Case (loc.needBranchesApply, loc.branchInfo) = shouldApplyHere @lhs.injectInfo @branches.branchFreeVars
+  | Case loc.needApply = @loc.needValueApply || @loc.needBranchesApply
+  | Case loc.preapply = CTm_Case @val @branches.injectApplied
+  | Case lhs.injectApplied =
+      if @loc.needApply
+        then injectApply @lhs.injectInfo @loc.preapply
+        else @loc.preapply
+  | Case branches.injectInfo =
+      if @loc.needValueApply
+        then repeat injectInfoEmpty
+        else @loc.branchInfo
+%%]
