@@ -205,6 +205,16 @@ SEM CBind
   | ThunkBind loc.allowMultiInline = not @body.inlinedSingle
   | ValBind loc.shouldInline = @value.shouldInline
   | ValBind loc.allowMultiInline = @value.allowMultiInline
+
+ATTR CTm [ | | isDirectThunkEval : {Maybe (ThunkName, ContName)} ]
+SEM CTm
+	| ThunkEval lhs.isDirectThunkEval = Just (@thunk, @cont)
+	| * - ThunkEval lhs.isDirectThunkEval = Nothing
+
+ATTR CTm [ | | isDirectContAppl : {Maybe (ContName, ValueName)} ]
+SEM CTm
+	| ContAppl lhs.isDirectContAppl = Just (@cont, @val)
+	| * - ContAppl lhs.isDirectContAppl = Nothing
 %%]
 
 %%[(8 core)
@@ -332,7 +342,12 @@ SEM CTm
         False -> Nothing
         True -> Just (@loc.allowMultiInline, @loc.newBindInlineMap,(@bindbody.original, @valname))
   | LetCont body.inlineMap =
-      insertCont @contname (@loc.newContName, @loc.inlineInfo) @lhs.inlineMap
+      case @bindbody.isDirectContAppl of
+        Nothing -> insertCont @contname (@loc.newContName, @loc.inlineInfo) @lhs.inlineMap
+        Just (cont, val) ->
+          if (val == @valname)
+            then insertCont @contname (infoContName @lhs.inlineMap cont) @lhs.inlineMap
+            else insertCont @contname (@loc.newContName, @loc.inlineInfo) @lhs.inlineMap
   | LetCont lhs.inlined =
       CTm_LetCont @loc.newContName @loc.newValName @bindbody.inlined @body.inlined
 
@@ -360,10 +375,17 @@ ATTR CBind CBindL [ | | newInlineMap USE {inlineMapUnion} {inlineMapEmpty} : {In
 SEM CBind
   | ThunkBind loc.newThunkName = trfThunkName @thunkname @lhs.inlineId
   | ThunkBind loc.newContName = trfContName @contname @lhs.inlineId
+  | ThunkBind loc.redirectedThunkName =
+      case @body.isDirectThunkEval of
+        Nothing -> @loc.newThunkName
+        Just (thunk, cont) ->
+          if (cont == @contname) && (thunk /= @thunkname)
+            then replaceThunkName @lhs.inlineMap thunk
+            else @loc.newThunkName
   | ThunkBind lhs.newInlineMap =
       case @loc.shouldInline of
-        False -> inlineMapSingleThunk @thunkname (@loc.newThunkName, Nothing)
-        True -> inlineMapSingleThunk @thunkname (@loc.newThunkName, Just (@loc.allowMultiInline, @lhs.inlineMap, (@body.original, @contname)))
+        False -> inlineMapSingleThunk @thunkname (@loc.redirectedThunkName, Nothing)
+        True -> inlineMapSingleThunk @thunkname (@loc.redirectedThunkName, Just (@loc.allowMultiInline, @lhs.inlineMap, (@body.original, @contname)))
   | ThunkBind body.inlineMap = insertCont @contname (@loc.newContName, Nothing) @lhs.inlineMap
   | ThunkBind lhs.inlined = CBind_ThunkBind @loc.newThunkName @loc.newContName @body.inlined
 
