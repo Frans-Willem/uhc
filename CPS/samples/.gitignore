@@ -1,0 +1,7 @@
+*.corecps-*
+*.corecps
+*.core
+*.il
+*.exe
+*.dll
+*.error
